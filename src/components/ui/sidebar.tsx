@@ -178,6 +178,11 @@ const Sidebar = React.forwardRef<
     ref
   ) => {
     const { isMobile, state, open, setOpen, openMobile, setOpenMobile } = useSidebar()
+    const [isMounted, setIsMounted] = React.useState(false);
+
+    React.useEffect(() => {
+      setIsMounted(true);
+    }, []);
     
     React.useEffect(() => {
       if (typeof defaultOpen !== 'undefined') {
@@ -201,7 +206,7 @@ const Sidebar = React.forwardRef<
       )
     }
 
-    if (isMobile) {
+    if (isMobile && isMounted) {
       return (
         <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
           <SheetContent
