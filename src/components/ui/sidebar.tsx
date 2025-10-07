@@ -180,7 +180,9 @@ const Sidebar = React.forwardRef<
     const { isMobile, state, open, setOpen, openMobile, setOpenMobile } = useSidebar()
     
     React.useEffect(() => {
-      setOpen(defaultOpen);
+      if (typeof defaultOpen !== 'undefined') {
+        setOpen(defaultOpen);
+      }
     }, [defaultOpen, setOpen]);
 
 
