@@ -88,12 +88,6 @@ export function AppSidebar() {
             {group.title && <SidebarGroupLabel>{group.title}</SidebarGroupLabel>}
             <SidebarMenu>
               {group.items.map((item: any, itemIndex) => {
-                const isDashboardItem = item.href === '/dashboard';
-                if (isDashboardItem && !isCollapsed) {
-                  // Hide dashboard link in expanded view, it's in the header.
-                  return null;
-                }
-
                 return (
                   <SidebarMenuItem key={itemIndex}>
                     <SidebarMenuButton
