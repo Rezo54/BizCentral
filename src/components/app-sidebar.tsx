@@ -20,6 +20,7 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
 } from './ui/sidebar';
+import { useState } from 'react';
 
 const navGroups = [
   {
@@ -28,6 +29,7 @@ const navGroups = [
         href: '/dashboard',
         label: 'Dashboard',
         icon: LayoutDashboard,
+        isDashboard: true,
       },
     ],
   },
@@ -70,6 +72,7 @@ const navGroups = [
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const [isSidebarHovered, setIsSidebarHovered] = useState(false);
 
   return (
     <>
@@ -79,25 +82,46 @@ export function AppSidebar() {
           <span className="font-bold text-lg">BizCentral</span>
         </Link>
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent
+        onMouseEnter={() => setIsSidebarHovered(true)}
+        onMouseLeave={() => setIsSidebarHovered(false)}
+      >
         {navGroups.map((group, groupIndex) => (
           <SidebarGroup key={groupIndex}>
             {group.title && <SidebarGroupLabel>{group.title}</SidebarGroupLabel>}
             <SidebarMenu>
-              {group.items.map((item, itemIndex) => (
-                <SidebarMenuItem key={itemIndex}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === item.href}
-                    tooltip={item.label}
+              {group.items.map((item: any, itemIndex) => {
+                const isDashboardItem = item.isDashboard;
+                const showDashboard = isDashboardItem && isSidebarHovered;
+
+                if (isDashboardItem && !showDashboard && pathname !== item.href) {
+                  return <div key={itemIndex} className="h-10" />; // Placeholder to maintain layout
+                }
+
+                return (
+                  <SidebarMenuItem
+                    key={itemIndex}
+                    className={`transition-all duration-300 ${
+                      isDashboardItem
+                        ? showDashboard || pathname === item.href
+                          ? 'opacity-100 translate-x-0'
+                          : 'opacity-0 -translate-x-full absolute'
+                        : ''
+                    }`}
                   >
-                    <Link href={item.href}>
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname === item.href}
+                      tooltip={item.label}
+                    >
+                      <Link href={item.href}>
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroup>
         ))}
