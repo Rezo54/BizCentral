@@ -1,3 +1,5 @@
+'use client';
+
 import {
   Card,
   CardContent,
@@ -14,8 +16,9 @@ import {
 } from 'lucide-react';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from 'recharts';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useEffect, useState } from 'react';
 
-const data = [
+const generateChartData = () => [
   { name: 'Jan', total: Math.floor(Math.random() * 5000) + 1000 },
   { name: 'Feb', total: Math.floor(Math.random() * 5000) + 1000 },
   { name: 'Mar', total: Math.floor(Math.random() * 5000) + 1000 },
@@ -31,6 +34,12 @@ const data = [
 ];
 
 export default function DashboardPage() {
+  const [data, setData] = useState<any[]>([]);
+
+  useEffect(() => {
+    setData(generateChartData());
+  }, []);
+
   return (
     <div className="flex flex-col gap-8">
       <header>
