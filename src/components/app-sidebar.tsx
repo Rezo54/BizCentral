@@ -19,8 +19,8 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupLabel,
+  useSidebar,
 } from './ui/sidebar';
-import { useState } from 'react';
 
 const navGroups = [
   {
@@ -29,7 +29,6 @@ const navGroups = [
         href: '/dashboard',
         label: 'Dashboard',
         icon: LayoutDashboard,
-        isDashboard: true,
       },
     ],
   },
@@ -72,7 +71,8 @@ const navGroups = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  const { state: sidebarState } = useSidebar();
+  const isCollapsed = sidebarState === 'collapsed';
 
   return (
     <>
@@ -82,33 +82,20 @@ export function AppSidebar() {
           <span className="font-bold text-lg">BizCentral</span>
         </Link>
       </SidebarHeader>
-      <SidebarContent
-        onMouseEnter={() => setIsSidebarHovered(true)}
-        onMouseLeave={() => setIsSidebarHovered(false)}
-      >
+      <SidebarContent>
         {navGroups.map((group, groupIndex) => (
           <SidebarGroup key={groupIndex}>
             {group.title && <SidebarGroupLabel>{group.title}</SidebarGroupLabel>}
             <SidebarMenu>
               {group.items.map((item: any, itemIndex) => {
-                const isDashboardItem = item.isDashboard;
-                const showDashboard = isDashboardItem && isSidebarHovered;
-
-                if (isDashboardItem && !showDashboard && pathname !== item.href) {
-                  return <div key={itemIndex} className="h-10" />; // Placeholder to maintain layout
+                const isDashboardItem = item.href === '/dashboard';
+                if (isDashboardItem && !isCollapsed) {
+                  // Hide dashboard link in expanded view, it's in the header.
+                  return null;
                 }
 
                 return (
-                  <SidebarMenuItem
-                    key={itemIndex}
-                    className={`transition-all duration-300 ${
-                      isDashboardItem
-                        ? showDashboard || pathname === item.href
-                          ? 'opacity-100 translate-x-0'
-                          : 'opacity-0 -translate-x-full absolute'
-                        : ''
-                    }`}
-                  >
+                  <SidebarMenuItem key={itemIndex}>
                     <SidebarMenuButton
                       asChild
                       isActive={pathname === item.href}

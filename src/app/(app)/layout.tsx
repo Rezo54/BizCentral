@@ -11,7 +11,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <SidebarProvider>
       <div className="min-h-screen w-full">
-        <Sidebar collapsible="icon" variant="sidebar">
+        <Sidebar collapsible="icon">
           <AppSidebar />
         </Sidebar>
         <SidebarInset>
