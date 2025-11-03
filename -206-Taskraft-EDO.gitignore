@@ -1,0 +1,16 @@
+node_modules/
+.next/
+.nextCache/
+out/
+dist/
+*.log
+.env
+.env.*
+.env.local
+.DS_Store
+.vscode/
+.idea/
+.firebase/
+firebase-debug.log
+firestore_debug.log
+storage_debug.log
