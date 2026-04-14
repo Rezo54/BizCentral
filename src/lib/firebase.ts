@@ -12,6 +12,9 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
 };
 
+// 👇 ADD IT HERE
+console.log("Firebase config:", firebaseConfig);
+
 // 🔥 THIS LINE IS CRITICAL
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
