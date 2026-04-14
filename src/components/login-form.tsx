@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { doc, getDoc } from "firebase/firestore";
 import {
   Form,
   FormControl,
@@ -67,29 +68,38 @@ export function LoginForm() {
       const uid = userCred.user.uid;
 
       // 🔥 CORRECT QUERY FOR YOUR STRUCTURE
-     const q = query(
-        collection(db, "users"),
-        where("uid", "==", uid)
-      );
+     // Try new structure first
+      let userData = null;
 
-      const snap = await getDocs(q);
+      const directSnap = await getDoc(doc(db, "users", uid));
 
-      // DEBUG
-      console.log("AUTH UID:", uid);
-      console.log("MATCHED USERS:", snap.docs.map(d => d.data()));
+      if (directSnap.exists()) {
+        userData = directSnap.data();
+      } else {
+        // fallback to old structure
+        const q = query(
+          collection(db, "users"),
+          where("uid", "==", uid)
+        );
 
-      if (snap.empty) {
-        toast({
-          variant: "destructive",
-          title: "Account Not Found",
-          description: "Please contact admin to complete setup.",
-        });
+        const snap = await getDocs(q);
 
-        setIsLoading(false);
-        return;
+        console.log("AUTH UID:", uid);
+        console.log("MATCHED USERS:", snap.docs.map(d => d.data()));
+
+        if (snap.empty) {
+          toast({
+            variant: "destructive",
+            title: "Account Not Found",
+            description: "Please contact admin to complete setup.",
+          });
+
+          setIsLoading(false);
+          return;
+        }
+
+        userData = snap.docs[0].data();
       }
-
-      const userData = snap.docs[0].data();
 
       if (userData.status !== "approved") {
         toast({
