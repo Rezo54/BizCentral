@@ -11,12 +11,12 @@ import {
   FileText,
   Settings,
 } from "lucide-react";
-import { PropsWithChildren } from "react";
-import { getCurrentUser, hasAccess, SessionUser } from "@/lib/session";
+import { PropsWithChildren, useEffect, useState, } from "react";
+import { getCurrentUser, hasAccess, SessionUser, AccessLevel } from "@/lib/session";
 
 /** ---------------- NAV CONFIG ---------------- */
 
-type Access = "standard" | "power" | "admin" | "superadmin";
+type Access = AccessLevel;
 
 type NavItem = {
   href: string;
@@ -37,7 +37,7 @@ const DASHBOARD_SECTION: NavSection = {
       href: "/dashboard",
       label: "Dashboard",
       icon: LayoutGrid,
-      minAccess: "power",
+      minAccess:  "power_user",
     },
   ],
 };
@@ -46,8 +46,8 @@ const MANAGEMENT_SECTION: NavSection = {
   heading: "Management",
   items: [
     { href: "/people", label: "People", icon: Users, minAccess: "standard" },
-    { href: "/accounting", label: "Accounting", icon: ReceiptText, minAccess: "power" },
-    { href: "/compliance", label: "Compliance", icon: ShieldCheck, minAccess: "power" },
+    { href: "/accounting", label: "Accounting", icon: ReceiptText, minAccess: "power_user" },
+    { href: "/compliance", label: "Compliance", icon: ShieldCheck, minAccess: "power_user" },
     { href: "/invoicing", label: "Invoicing", icon: FileText, minAccess: "standard" },
   ],
 };
@@ -125,7 +125,15 @@ function NavSectionBlock({
 
 export default function AppGroupLayout({ children }: PropsWithChildren) {
   const pathname = usePathname();
-  const user = getCurrentUser(); // swap to real auth later
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+  async function loadUser() {
+    const u = await getCurrentUser();
+    setUser(u);
+  }
+  loadUser();
+  }, []) // swap to real auth later
 
   return (
     <div className="min-h-dvh grid grid-cols-1 md:grid-cols-[256px_1fr]">

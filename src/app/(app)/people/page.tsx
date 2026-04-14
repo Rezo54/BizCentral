@@ -18,9 +18,9 @@ export default function PeoplePage() {
             Manage HR functions, including payroll, leave requests, policies, and forms.
           </p>
         </div>
-        <Button>
+        {/* <Button>
           <PlusCircle className="mr-2 h-4 w-4" /> Add Employee
-        </Button>
+        </Button> */}
       </div>
       <Card>
         <CardHeader>

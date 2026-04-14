@@ -22,7 +22,7 @@ import {
   useSidebar,
 } from './ui/sidebar';
 
-const navGroups = [
+const navGroups = () => [
   {
     items: [
       {
@@ -65,6 +65,11 @@ const navGroups = [
         label: 'Users',
         icon: Settings,
       },
+      {
+        href: '/admin/upload-edo',
+        label: 'Upload EDO Data',
+        icon: FileText,
+      },
     ],
   },
 ];
@@ -83,7 +88,7 @@ export function AppSidebar() {
         </Link>
       </SidebarHeader>
       <SidebarContent>
-        {navGroups.map((group, groupIndex) => (
+        {navGroups().map((group, groupIndex) => (
           <SidebarGroup key={groupIndex}>
             {group.title && <SidebarGroupLabel>{group.title}</SidebarGroupLabel>}
             <SidebarMenu>

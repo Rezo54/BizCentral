@@ -1,0 +1,85 @@
+@media print {
+
+  body * {
+    visibility: hidden;
+  }
+
+  .print-report,
+  .print-report * {
+    visibility: visible;
+  }
+
+  .print-report {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: white;
+    color: black;
+    padding: 24px;
+    font-size: 12px;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  /* HEADER */
+  .print-header {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+
+  .print-logo {
+    display: block;
+    margin: 0 auto 10px auto;
+    max-height: 70px;
+  }
+
+  .print-meta {
+    text-align: center;
+    font-size: 12px;
+  }
+
+  /* TOTAL GRID */
+  .print-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+
+  .print-section {
+    margin-top: 16px;
+  }
+
+  /* TABLE */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+  }
+
+  th, td {
+    border: 1px solid #000;
+    padding: 6px;
+    text-align: left;
+  }
+
+  th {
+    background: #eee;
+  }
+
+  /* PAGE BREAK FIX */
+  .page-break {
+    break-before: page;
+  }
+
+  .page-break:first-child {
+    break-before: auto;
+  }
+
+  tr {
+    break-inside: avoid;
+  }
+}

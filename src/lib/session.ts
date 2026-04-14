@@ -1,105 +1,84 @@
-// src/lib/session.ts
+import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { db } from "@/lib/firebase";
+import { collection, query, where, getDocs } from "firebase/firestore";
 
-// Business persona (from your "User Types" sheet)
-export type UserRole =
-  | "super_admin"       // Taskraft-level, full system
-  | "admin_user"        // Admin user of a business/entity
-  | "supervisor"        // Manages subordinates, approves leave
-  | "standard_user"     // Normal employee
-  | "client"            // The business owner / EDO
-  | "client_employee"   // Works for the client/EDO (e.g. driver, timesheets)
-  | "supplier";         // External supplier / reliever / maintenance invoice
+// =============================
+// TYPES
+// =============================
+export type AccessLevel = "standard" | "power_user" | "admin" | "superadmin";
 
-// Access tier (from your "User Access Levels" sheet columns)
-export type AccessLevel =
-  | "standard"     // Standard User
-  | "power"        // Power User
-  | "admin"        // Admin
-  | "superadmin";  // Super Admin
+export type UserType = "reliever" | "edo" | "taskraft";
 
 export type SessionUser = {
-  id: string;
+  uid: string;
   name: string;
+  email: string;
 
-  // role = the row in your sheet ("Supervisor", "Client", etc.)
-  role: UserRole;
+  userType: UserType; // 🔥 ADD THIS
 
-  // accessLevel = highest column they qualify for in your sheet.
-  // e.g. Supervisor -> "power", Client -> "power", Supplier -> "power",
-  // Admin User -> "admin", Super Admin -> "superadmin"
   accessLevel: AccessLevel;
 
-  // org scoping
-  companyId?: string;          // which business they're tied to (EDO, etc.)
-  managesCompanyIds?: string[]; // supervisor/admin_user: who they can manage
+  edoId?: string;
+  companyId?: string;
+  relieverId?: string;
 };
 
-// 🔐 MOCK SESSION
-// Later we replace this with Firebase Auth + Firestore user doc + custom claims.
-export function getCurrentUser(): SessionUser {
-  // EXAMPLES (flip these manually while developing):
-  //
-  // return {
-  //   id: "u001",
-  //   name: "Sarah (Super Admin)",
-  //   role: "super_admin",
-  //   accessLevel: "superadmin",
-  // };
+// =============================
+// GET CURRENT USER (REAL)
+// =============================
+export async function getCurrentUser(): Promise<SessionUser | null> {
+  const auth = getAuth();
 
-  // return {
-  //   id: "u002",
-  //   name: "Lebo (Admin User)",
-  //   role: "admin_user",
-  //   accessLevel: "admin",
-  //   managesCompanyIds: ["biz-001"],
-  // };
+  return new Promise((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      unsubscribe();
 
-  // return {
-  //   id: "u003",
-  //   name: "Kamo (Supervisor)",
-  //   role: "supervisor",
-  //   accessLevel: "power",
-  //   companyId: "biz-001",
-  //   managesCompanyIds: ["biz-001"],
-  // };
+      if (!firebaseUser) {
+        resolve(null);
+        return;
+      }
 
-  // return {
-  //   id: "u004",
-  //   name: "Driver Reliever",
-  //   role: "client_employee",
-  //   accessLevel: "standard",
-  //   companyId: "biz-001",
-  // };
+      const q = query(
+        collection(db, "users"),
+        where("uid", "==", firebaseUser.uid)
+      );
 
-  // return {
-  //   id: "u005",
-  //   name: "EDO Owner",
-  //   role: "client",
-  //   accessLevel: "power",
-  //   companyId: "biz-001",
-  // };
+      const snap = await getDocs(q);
 
-  return {
-    id: "u006",
-    name: "External Supplier",
-    role: "supplier",
-    accessLevel: "power",
-    companyId: "biz-001",
-  };
+      if (snap.empty) {
+        resolve(null);
+        return;
+      }
+
+  
+
+      const data = snap.docs[0].data();
+
+        resolve({
+          uid: data.uid,
+          name: data.name,
+          email: data.email,
+
+          userType: data.userType,       // 🔥 REQUIRED
+          accessLevel: data.accessLevel, // 🔥 REQUIRED
+
+          companyId: data.companyId,
+          relieverId: data.relieverId,
+        });
+    });
+  });
 }
 
-/**
- * helper to compare access levels
- * "superadmin" > "admin" > "power" > "standard"
- */
+// =============================
+// ACCESS CONTROL
+// =============================
 const ACCESS_RANK: Record<AccessLevel, number> = {
   standard: 1,
-  power: 2,
+  power_user: 2,
   admin: 3,
   superadmin: 4,
 };
 
-// Can this user see something that requires `minLevel`?
 export function hasAccess(user: SessionUser, minLevel: AccessLevel) {
   return ACCESS_RANK[user.accessLevel] >= ACCESS_RANK[minLevel];
 }

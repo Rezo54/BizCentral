@@ -38,6 +38,7 @@
     --sidebar-border: 217.2 32.6% 17.5%;
     --sidebar-ring: 224.3 76.3% 48%;
   }
+
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 0 0% 98%;
@@ -76,9 +77,103 @@
 
 @layer base {
   * {
-    @apply border-border;
+    /* no @apply border-border here; use the variable directly */
+    border-color: hsl(var(--border));
   }
+
   body {
     @apply bg-background text-foreground;
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+}
+
+@media print {
+
+  /* Hide everything not needed */
+  .no-print {
+    display: none !important;
+  }
+
+  /* Remove shadows, backgrounds, UI noise */
+  * {
+    box-shadow: none !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 12px;
+  }
+
+  /* Center logo at top */
+  .print-header {
+    display: block;
+    text-align: center;
+    margin-bottom: 20px;
+  }
+
+  .print-header img {
+    max-height: 80px;
+    margin: 0 auto;
+  }
+
+  /* Tables clean for Excel/PDF look */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  th, td {
+    border: 1px solid #000;
+    padding: 6px;
+    text-align: left;
+  }
+
+  th {
+    background: #eee;
+  }
+
+  /* Page breaks between EDOs */
+  .page-break {
+    page-break-before: always;
+  }
+
+  /* Prevent breaking inside rows/cards */
+  tr, .card {
+    page-break-inside: avoid;
+  }
+
+  
+}
+
+.bolt {
+  border: 4px solid transparent;
+  border-bottom: 18px solid #facc15; /* slightly smaller for UI */
+
+  transform: rotateZ(-160deg);
+
+  width: 0;
+  height: 0;
+  padding: 2px;
+  position: relative;
+  display: inline-block;
+}
+
+/* tip */
+.bolt::after {
+  content: "";
+  position: absolute;
+  top: -7px;
+  left: -6px;
+
+  border: 4px solid transparent;
+  border-bottom: 20px solid #facc15;
+
+  transform: rotateZ(4deg);
+}
+
+nextjs-portal {
+  display: none !important;
 }

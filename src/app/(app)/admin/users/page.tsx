@@ -1,152 +1,244 @@
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { PlaceHolderImages } from '@/lib/placeholder-images';
-import { MoreHorizontal, PlusCircle } from 'lucide-react';
+//src/app/(app)/admin/users/page.tsx
 
-const users = [
-  {
-    name: 'Olivia Martin',
-    email: 'olivia.martin@email.com',
-    role: 'Admin',
-    status: 'Active',
-    avatar: PlaceHolderImages.find((p) => p.id === 'user-avatar-1')?.imageUrl,
-  },
-  {
-    name: 'Jackson Lee',
-    email: 'jackson.lee@email.com',
-    role: 'Super-User',
-    status: 'Active',
-    avatar: PlaceHolderImages.find((p) => p.id === 'user-avatar-2')?.imageUrl,
-  },
-  {
-    name: 'Isabella Nguyen',
-    email: 'isabella.nguyen@email.com',
-    role: 'User',
-    status: 'Active',
-    avatar: PlaceHolderImages.find((p) => p.id === 'user-avatar-3')?.imageUrl,
-  },
-  {
-    name: 'William Kim',
-    email: 'will@email.com',
-    role: 'User',
-    status: 'Inactive',
-    avatar: PlaceHolderImages.find((p) => p.id === 'user-avatar-4')?.imageUrl,
-  },
-  {
-    name: 'Sofia Davis',
-    email: 'sofia.davis@email.com',
-    role: 'User',
-    status: 'Active',
-    avatar: PlaceHolderImages.find((p) => p.id === 'user-avatar-5')?.imageUrl,
-  },
-];
+"use client";
 
-export default function UsersPage() {
+import { useEffect, useState } from "react";
+import { db } from "@/lib/firebase";
+import {
+  collection,
+  getDocs,
+  doc,
+  updateDoc,
+  deleteDoc,
+} from "firebase/firestore";
+
+import { getCurrentUser } from "@/lib/session";
+
+function mapUserType(role: string) {
+  if (role === "client_employee" || role === "supplier") {
+    return "reliever";
+  }
+
+  if (role === "client") {
+    return "edo";
+  }
+
+  if (role === "admin_user" || role === "supervisor") {
+    return "taskraft";
+  }
+
+  return "unknown";
+}
+
+
+export default function AdminUsersPage() {
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  // 🔥 DEFINE ROLES HERE
+  const admin =
+  currentUser?.accessLevel === "admin" ||
+  currentUser?.role === "admin_user";
+
+  const superadmin =
+  currentUser?.accessLevel === "superadmin" ||
+  currentUser?.role === "super_admin";
+
+  // =============================
+  // LOAD USERS
+  // =============================
+  async function loadUsers() {
+    const snap = await getDocs(collection(db, "users"));
+    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    setUsers(data);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    async function init() {
+    const u = await getCurrentUser();
+    setCurrentUser(u);
+    await loadUsers();
+    }
+
+    init();
+    }, []);
+
+  // =============================
+  // APPROVE USER
+  // =============================
+  async function approveUser(id: string, role: string) {
+   if (!superadmin) {
+  alert("Only superadmin can approve users");
+  return;
+  }
+
+  const userType = mapUserType(role); // 🔥 ADD THIS
+
+  await updateDoc(doc(db, "users", id), {
+    status: "approved",
+    role,
+    userType, // 🔥 ADD THIS
+  });
+
+  loadUsers();
+  }
+
+ 
+
+  // =============================
+  // REJECT USER
+  // =============================
+  async function rejectUser(id: string) {
+  if (!superadmin) {
+    alert("Only superadmin can reject users");
+    return;
+  }
+
+  await updateDoc(doc(db, "users", id), {
+    status: "rejected",
+  });
+
+  loadUsers();
+  }
+
+  // =============================
+  // DELETE USER (PROTECTED)
+  // =============================
+  async function deleteUser(id: string, role: string) {
+    if (!superadmin) {
+      alert("Only superadmin can delete users");
+      return;
+    }
+
+    const confirmDelete = confirm(
+      "Are you sure you want to remove this user?"
+    );
+    if (!confirmDelete) return;
+
+    await deleteDoc(doc(db, "users", id));
+
+    loadUsers();
+  }
+
+  if (loading) return <div className="p-6">Loading...</div>;
+
+  // 🔒 BLOCK NON-ADMIN USERS
+  if (!admin && !superadmin) {
+    return <div className="p-6">No access</div>;
+  }
+
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Users</h1>
-          <p className="text-muted-foreground">
-            Manage users and their roles in the system.
-          </p>
-        </div>
-        <Button>
-          <PlusCircle className="mr-2 h-4 w-4" /> Add User
-        </Button>
+    <div className="p-6 space-y-4">
+      <h1 className="text-xl font-semibold">User Approvals</h1>
+
+      <div className="border rounded overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="p-3 text-left">Name</th>
+              <th className="p-3 text-left">Email</th>
+              <th className="p-3 text-left">Type</th>
+              <th className="p-3 text-left">Company</th>
+              <th className="p-3 text-left">Status</th>
+              <th className="p-3 text-left">Role</th>
+              <th className="p-3 text-left">Actions</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id} className="border-t hover:bg-gray-50">
+                <td className="p-3">{u.name}</td>
+                  <td className="p-3">{u.email}</td>
+                  <td className="p-3 capitalize">{u.userType}</td>
+                  <td className="p-3 capitalize">{u.userType === "reliever"? u.relieverId?.replace(/-\d+$/, ""): u.businessName}</td>
+                  <td className="p-3 capitalize">{u.status}</td>
+
+                  <td className="p-3">
+                <span className="px-2 py-1 rounded bg-gray-200 text-xs capitalize">
+                  {u.role || "pending"}
+                </span>
+                </td>
+
+<td className="p-3 space-x-2">
+                  {/* =======================
+                      PENDING USERS ACTIONS
+                  ======================= */}
+                  {u.status === "pending" && (
+                    <>
+                      {/* ROLE SELECTOR */}
+                      <select
+                        disabled={!superadmin}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          if (!superadmin) return; // 🔒 LOCK
+                          approveUser(u.id, e.target.value);
+                        }}
+                        className="border px-2 py-1 rounded"
+                        defaultValue=""
+                      >
+                       <option value="">Assign Role</option>
+                       <option value="client_employee">Reliever</option>
+                       <option value="client">EDO</option>
+                       <option value="admin_user">Admin</option>
+                       <option value="supervisor">Supervisor</option>
+                       <option value="supplier">Supplier</option>
+                      </select>
+
+                      {/* REJECT */}
+                      <button
+                        disabled={!superadmin}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!superadmin) return; // 🔒 LOCK
+                          rejectUser(u.id);
+                        }}
+                        className={`px-2 py-1 rounded text-white ${
+                          superadmin ? "bg-red-600" : "bg-gray-400 cursor-not-allowed"
+                        }`}
+                      >
+                        Reject
+                      </button>
+                    </>
+                  )}
+
+                  {/* =======================
+                      REMOVE USER
+                  ======================= */}
+                  {u.role !== "super_admin" && (
+                    <button
+                      disabled={!superadmin}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!superadmin) return; // 🔒 LOCK
+                        deleteUser(u.id, u.role);
+                      }}
+                      className={`px-2 py-1 rounded text-white ${
+                        superadmin ? "bg-gray-700" : "bg-gray-400 cursor-not-allowed"
+                      }`}
+                    >
+                      Remove
+                    </button>
+                  )}
+
+                  {/* =======================
+                      STATUS DISPLAY
+                  ======================= */}
+                  {u.status === "approved" && (
+                    <span className="text-green-600">Approved</span>
+                  )}
+
+                  {u.status === "rejected" && (
+                    <span className="text-red-600">Rejected</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>User List</CardTitle>
-          <CardDescription>
-            A list of all users in your organization.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>User</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.map((user) => (
-                <TableRow key={user.email}>
-                  <TableCell className="font-medium">
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-9 w-9">
-                        <AvatarImage src={user.avatar} alt="Avatar" data-ai-hint="person"/>
-                        <AvatarFallback>
-                          {user.name.charAt(0)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="grid gap-0.5">
-                        <span className="font-semibold">{user.name}</span>
-                        <span className="text-sm text-muted-foreground">
-                          {user.email}
-                        </span>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={user.role === 'Admin' ? 'default' : user.role === 'Super-User' ? 'secondary' : 'outline'}>{user.role}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={user.status === 'Active' ? 'secondary' : 'destructive'}>{user.status}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          aria-haspopup="true"
-                          size="icon"
-                          variant="ghost"
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">Toggle menu</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem>Edit</DropdownMenuItem>
-                        <DropdownMenuItem>Delete</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
     </div>
   );
 }
