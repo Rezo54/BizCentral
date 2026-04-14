@@ -67,14 +67,14 @@ export function LoginForm() {
       const uid = userCred.user.uid;
 
       // 🔥 CORRECT QUERY FOR YOUR STRUCTURE
-      const q = query(
+     const q = query(
         collection(db, "users"),
         where("uid", "==", uid)
       );
 
       const snap = await getDocs(q);
 
-      // 🔥 DEBUG (REMOVE LATER)
+      // DEBUG
       console.log("AUTH UID:", uid);
       console.log("MATCHED USERS:", snap.docs.map(d => d.data()));
 
