@@ -23,7 +23,7 @@ import {
   sendPasswordResetEmail,
 } from "firebase/auth";
 
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 const formSchema = z.object({
@@ -67,14 +67,21 @@ export function LoginForm() {
 
       const uid = userCred.user.uid;
 
-      const q = query(collection(db, "users"), where("uid", "==", uid));
-      const snap = await getDocs(q);
+     const ref = doc(db, "users", uid);
+    const snap = await getDoc(ref);
 
-      if (snap.empty) {
-        throw new Error("User record not found");
+      if (!snap.exists()) {
+        toast({
+          variant: "destructive",
+          title: "Account Not Found",
+          description: "Please contact admin to complete setup.",
+        });
+
+        setIsLoading(false);
+        return;
       }
 
-      const userData = snap.docs[0].data();
+    const userData = snap.data();
 
       if (userData.status !== "approved") {
         toast({
