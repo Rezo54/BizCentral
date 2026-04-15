@@ -59,9 +59,7 @@ export default function AdminUsersPage() {
   let mounted = true;
 
   async function init() {
-    const u = await getCurrentUser();
-
-    console.log("CURRENT USER:", u);
+    const u = await getCurrentUser();    
 
     if (!mounted) return;
 
@@ -188,23 +186,27 @@ export default function AdminUsersPage() {
                   {u.status === "pending" && (
                     <>
                       {/* ROLE SELECTOR */}
-                      <select
-                        disabled={!superadmin}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          if (!superadmin) return; // 🔒 LOCK
-                          approveUser(u.id, e.target.value);
-                        }}
-                        className="border px-2 py-1 rounded"
-                        defaultValue=""
-                      >
-                       <option value="">Assign Role</option>
-                       <option value="client_employee">Reliever</option>
-                       <option value="client">EDO</option>
-                       <option value="admin_user">Admin</option>
-                       <option value="supervisor">Supervisor</option>
-                       <option value="supplier">Supplier</option>
-                      </select>
+                    <select
+                      disabled={!superadmin}
+                      value={u.role || ""} // 🔥 CONTROLLED VALUE
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        if (!superadmin) return;
+
+                        const newRole = e.target.value;
+                        if (!newRole) return; // ignore empty
+
+                        approveUser(u.id, newRole);
+                      }}
+                      className="border px-2 py-1 rounded"
+                    >
+                      <option value="">Assign Role</option>
+                      <option value="client_employee">Reliever</option>
+                      <option value="client">EDO</option>
+                      <option value="admin_user">Admin</option>
+                      <option value="supervisor">Supervisor</option>
+                      <option value="supplier">Supplier</option>
+                    </select>
 
                       {/* REJECT */}
                       <button
