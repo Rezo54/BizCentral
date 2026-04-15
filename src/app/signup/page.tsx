@@ -232,8 +232,7 @@ export default function SignupPage() {
             <span>
               I agree to the{" "}
               <a
-                href="/terms"
-                target="_blank"
+                href="/terms"                
                 className="text-blue-600 underline"
               >
                 Terms & Conditions (POPIA)
