@@ -20,12 +20,12 @@ export default function TermsPage() {
         />
       </div>
 
-      {/* 🔙 BACK TO LOGIN */}
+      {/* 🔙 BACK TO Signup */}
       <p
-        onClick={() => router.push("/")}
+        onClick={() => router.push("/signup")}
         className="text-sm text-blue-600 cursor-pointer hover:underline"
       >
-        ← Back to Login
+        ← Back to Signup
       </p>
 
       <h1 className="text-2xl font-bold">
