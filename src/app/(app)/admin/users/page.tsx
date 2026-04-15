@@ -187,26 +187,41 @@ export default function AdminUsersPage() {
                     <>
                       {/* ROLE SELECTOR */}
                     <select
-                      disabled={!superadmin}
-                      value={u.role || ""} // 🔥 CONTROLLED VALUE
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        if (!superadmin) return;
+                        disabled={!superadmin}
+                        value={u.role || ""}
+                        onChange={(e) => {
+                          e.stopPropagation();
 
-                        const newRole = e.target.value;
-                        if (!newRole) return; // ignore empty
+                          const newRole = e.target.value;
 
-                        approveUser(u.id, newRole);
-                      }}
-                      className="border px-2 py-1 rounded"
-                    >
-                      <option value="">Assign Role</option>
-                      <option value="client_employee">Reliever</option>
-                      <option value="client">EDO</option>
-                      <option value="admin_user">Admin</option>
-                      <option value="supervisor">Supervisor</option>
-                      <option value="supplier">Supplier</option>
+                          // 🔥 store selected role locally on the row
+                          u.role = newRole;
+                        }}
+                        className="border px-2 py-1 rounded"
+                      >
+                        <option value="">Assign Role</option>
+                        <option value="client_employee">Reliever</option>
+                        <option value="client">EDO</option>
+                        <option value="admin_user">Admin</option>
+                        <option value="supervisor">Supervisor</option>
+                        <option value="supplier">Supplier</option>
                     </select>
+
+                      {/* APPROVE */}
+                      <button
+                        disabled={!superadmin || !u.role}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          
+                          if (!superadmin || !u.role) return; // 🔒 LOCK
+                          approveUser(u.id, u.role);
+                        }}
+                        className={`px-2 py-1 rounded text-white ${
+                          superadmin && u.role ? "bg-green-600" : "bg-gray-400 cursor-not-allowed"  
+                        }`}
+                      >
+                        Approve
+                      </button>                    
 
                       {/* REJECT */}
                       <button
