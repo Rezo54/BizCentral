@@ -28,6 +28,7 @@ export type SessionUser = {
 // =============================
 export async function getCurrentUser(): Promise<SessionUser | null> {
   const auth = getAuth();
+  const user = auth.currentUser;
 
   return new Promise((resolve) => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
