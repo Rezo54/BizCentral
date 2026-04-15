@@ -58,6 +58,9 @@ export default function AdminUsersPage() {
   useEffect(() => {
     async function init() {
     const u = await getCurrentUser();
+
+    console.log("CURRENT USER:", currentUser);//Temporary log to check current user data
+
     setCurrentUser(u);
     await loadUsers();
     }
