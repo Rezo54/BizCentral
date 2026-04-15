@@ -1,7 +1,36 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import Image from "next/image";
+
 export default function TermsPage() {
+  const router = useRouter();
+
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-4">
-      <h1 className="text-2xl font-bold">Terms & Conditions (POPIA)</h1>
+
+      {/* 🔥 LOGO */}
+      <div className="flex justify-center mb-4">
+        <Image
+          src="/logo.png" // 👉 make sure this exists in /public
+          alt="Taskraft Logo"
+          width={140}
+          height={60}
+          priority
+        />
+      </div>
+
+      {/* 🔙 BACK TO LOGIN */}
+      <p
+        onClick={() => router.push("/")}
+        className="text-sm text-blue-600 cursor-pointer hover:underline"
+      >
+        ← Back to Login
+      </p>
+
+      <h1 className="text-2xl font-bold">
+        Terms & Conditions (POPIA)
+      </h1>
 
       <p>
         By using this platform, you consent to the collection, processing,
