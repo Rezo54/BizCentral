@@ -56,17 +56,31 @@ export default function AdminUsersPage() {
   }
 
   useEffect(() => {
-    async function init() {
+  let mounted = true;
+
+  async function init() {
     const u = await getCurrentUser();
 
-    console.log("CURRENT USER:", currentUser);//Temporary log to check current user data
+    console.log("CURRENT USER:", u);
 
-    setCurrentUser(u);
-    await loadUsers();
+    if (!mounted) return;
+
+    if (!u) {
+      setLoading(false); // stop loading spinner
+      return;
     }
 
-    init();
-    }, []);
+    setCurrentUser(u);
+
+    await loadUsers();
+  }
+
+  init();
+
+  return () => {
+    mounted = false;
+  };
+}, []);
 
   // =============================
   // APPROVE USER
@@ -125,7 +139,9 @@ export default function AdminUsersPage() {
     loadUsers();
   }
 
-  if (loading) return <div className="p-6">Loading...</div>;
+  if (loading || currentUser === null) {
+  return <div className="p-6">Loading...</div>;
+  }
 
   // 🔒 BLOCK NON-ADMIN USERS
   if (!admin && !superadmin) {
