@@ -23,6 +23,8 @@ export default function SignupPage() {
 
   const [loading, setLoading] = useState(false);
 
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+
   useEffect(() => {
     async function loadData() {
       const edoSnap = await getDocs(collection(db, "companies"));
@@ -41,6 +43,10 @@ export default function SignupPage() {
   }, []);
 
   async function handleSignup() {
+    if (!acceptedTerms) {
+  alert("You must accept the Terms & Conditions (POPIA)");
+  return;
+  }
     if (password !== confirmPassword) {
       alert("Passwords do not match");
       return;
@@ -136,7 +142,7 @@ export default function SignupPage() {
 
           {/* Name */}
           <input
-            placeholder="Full Name"
+            placeholder="Name and Surname"
             className="w-full border px-3 py-2 rounded"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -215,11 +221,33 @@ export default function SignupPage() {
             onChange={(e) => setConfirmPassword(e.target.value)}
           />
 
+          <div className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={(e) => setAcceptedTerms(e.target.checked)}
+              className="mt-1"
+            />
+
+            <span>
+              I agree to the{" "}
+              <a
+                href="/terms"
+                target="_blank"
+                className="text-blue-600 underline"
+              >
+                Terms & Conditions (POPIA)
+              </a>
+            </span>
+          </div>
+
           {/* Submit */}
           <button
             onClick={handleSignup}
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition"
+            disabled={loading || !acceptedTerms}
+            className={`w-full py-2 rounded text-white ${
+              acceptedTerms ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-400"
+            }`}
           >
             {loading ? "Creating..." : "Create Account"}
           </button>

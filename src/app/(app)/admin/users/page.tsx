@@ -61,7 +61,7 @@ export default function AdminUsersPage() {
   async function init() {
     const u = await getCurrentUser();
     
-    console.log("CURRENT USER:", u);
+    //console.log("CURRENT USER:", u);
 
     if (!mounted) return;
 
