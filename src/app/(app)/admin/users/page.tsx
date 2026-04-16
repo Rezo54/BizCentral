@@ -204,8 +204,7 @@ export default function AdminUsersPage() {
             </tr>          
               <th className="p-3 text-left">Role</th>
               <th className="p-3 text-left">Actions</th>
-            </tr>
-          </thead>
+            </tr>         
 
           <tbody>
             {sortedUsers.map((u) => (
