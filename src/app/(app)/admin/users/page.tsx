@@ -43,16 +43,24 @@ export default function AdminUsersPage() {
 
   const superadmin =
   currentUser?.accessLevel === "superadmin" ||
-  currentUser?.role === "super_admin";
+  currentUser?.role === "superadmin";
+
+  const [sortField, setSortField] = useState<string>("name"); // 🔥 DEFAULT SORT FIELD, added 16/04/2026
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   // =============================
   // LOAD USERS
   // =============================
   async function loadUsers() {
+  try {
     const snap = await getDocs(collection(db, "users"));
     const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     setUsers(data);
+  } catch (err) {
+    console.error("Load users failed:", err);
+  } finally {
     setLoading(false);
+  }
   }
 
   useEffect(() => {
@@ -83,6 +91,17 @@ export default function AdminUsersPage() {
 }, []);
 
   // =============================
+  // SORT USERS (CLIENT-SIDE)
+  function handleSort(field: string) {
+  if (sortField === field) {
+    setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+  } else {
+    setSortField(field);
+    setSortDirection("asc");
+    }
+  }
+
+  // =============================
   // APPROVE USER
   // =============================
   async function approveUser(id: string, role: string) {
@@ -100,9 +119,7 @@ export default function AdminUsersPage() {
   });
 
   loadUsers();
-  }
-
- 
+  } 
 
   // =============================
   // REJECT USER
@@ -148,6 +165,15 @@ export default function AdminUsersPage() {
     return <div className="p-6">No access</div>;
   }
 
+  const sortedUsers = [...users].sort((a, b) => {
+  const aVal = (a[sortField] || "").toString().toLowerCase();
+  const bVal = (b[sortField] || "").toString().toLowerCase();
+
+  if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
+  if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
+  return 0;
+  });
+
   return (
     <div className="p-6 space-y-4">
       <h1 className="text-xl font-semibold">User Approvals</h1>
@@ -156,18 +182,33 @@ export default function AdminUsersPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-100">
             <tr>
-              <th className="p-3 text-left">Name</th>
-              <th className="p-3 text-left">Email</th>
-              <th className="p-3 text-left">Type</th>
-              <th className="p-3 text-left">Company</th>
-              <th className="p-3 text-left">Status</th>
+              <th onClick={() => handleSort("name")} className="p-3 text-left cursor-pointer">
+                Name {sortField === "name" ? (sortDirection === "asc" ? "▲" : "▼") : ""}
+              </th>
+              <th onClick={() => handleSort("email")} className="p-3 text-left cursor-pointer">
+                Email {sortField === "email" ? (sortDirection === "asc" ? "▲" : "▼") : ""}
+              </th>
+              <th onClick={() => handleSort("userType")} className="p-3 text-left cursor-pointer">
+                Type {sortField === "userType" ? (sortDirection === "asc" ? "▲" : "▼") : ""}
+              </th>
+              <th onClick={() => handleSort("businessName")} className="p-3 text-left cursor-pointer">
+                Company {sortField === "businessName" ? (sortDirection === "asc" ? "▲" : "▼") : ""}
+              </th>
+              <th onClick={() => handleSort("status")} className="p-3 text-left cursor-pointer">
+                Status {sortField === "status" ? (sortDirection === "asc" ? "▲" : "▼") : ""}
+              </th>
+              <th onClick={() => handleSort("role")} className="p-3 text-left cursor-pointer">
+                Role {sortField === "role" ? (sortDirection === "asc" ? "▲" : "▼") : ""}
+              </th>
+              <th className="p-3 text-left">Actions</th>
+            </tr>          
               <th className="p-3 text-left">Role</th>
               <th className="p-3 text-left">Actions</th>
             </tr>
           </thead>
 
           <tbody>
-            {users.map((u) => (
+            {sortedUsers.map((u) => (
               <tr key={u.id} className="border-t hover:bg-gray-50">
                 <td className="p-3">{u.name}</td>
                   <td className="p-3">{u.email}</td>
@@ -181,7 +222,7 @@ export default function AdminUsersPage() {
                 </span>
                 </td>
 
-<td className="p-3 space-x-2">
+                <td className="p-3 space-x-2">
                   {/* =======================
                       PENDING USERS ACTIONS
                   ======================= */}
@@ -254,7 +295,7 @@ export default function AdminUsersPage() {
                   {/* =======================
                       REMOVE USER
                   ======================= */}
-                  {u.role !== "super_admin" && (
+                  {u.role !== "superadmin" && (
                     <button
                       disabled={!superadmin}
                       onClick={(e) => {
