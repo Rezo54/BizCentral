@@ -183,28 +183,21 @@ export default function AdminUsersPage() {
           <thead className="bg-gray-100">
             <tr>
               <th onClick={() => handleSort("name")} className="p-3 text-left cursor-pointer">
-                Name {sortField === "name" ? (sortDirection === "asc" ? "▲" : "▼") : ""}
-              </th>
+                Name {sortField === "name" ? (sortDirection === "asc" ? "▲" : "▼") : ""}</th>
               <th onClick={() => handleSort("email")} className="p-3 text-left cursor-pointer">
-                Email {sortField === "email" ? (sortDirection === "asc" ? "▲" : "▼") : ""}
-              </th>
+                Email {sortField === "email" ? (sortDirection === "asc" ? "▲" : "▼") : ""}</th>
               <th onClick={() => handleSort("userType")} className="p-3 text-left cursor-pointer">
-                Type {sortField === "userType" ? (sortDirection === "asc" ? "▲" : "▼") : ""}
-              </th>
+                Type {sortField === "userType" ? (sortDirection === "asc" ? "▲" : "▼") : ""}</th>
               <th onClick={() => handleSort("businessName")} className="p-3 text-left cursor-pointer">
-                Company {sortField === "businessName" ? (sortDirection === "asc" ? "▲" : "▼") : ""}
-              </th>
+                Company {sortField === "businessName" ? (sortDirection === "asc" ? "▲" : "▼") : ""}</th>
               <th onClick={() => handleSort("status")} className="p-3 text-left cursor-pointer">
-                Status {sortField === "status" ? (sortDirection === "asc" ? "▲" : "▼") : ""}
-              </th>
+                Status {sortField === "status" ? (sortDirection === "asc" ? "▲" : "▼") : ""}</th>
               <th onClick={() => handleSort("role")} className="p-3 text-left cursor-pointer">
-                Role {sortField === "role" ? (sortDirection === "asc" ? "▲" : "▼") : ""}
-              </th>
-              <th className="p-3 text-left">Actions</th>
-            </tr>          
+                Role {sortField === "role" ? (sortDirection === "asc" ? "▲" : "▼") : ""}</th>                                   
               <th className="p-3 text-left">Role</th>
               <th className="p-3 text-left">Actions</th>
-            </tr>         
+            </tr>
+          </thead>         
 
           <tbody>
             {sortedUsers.map((u) => (
@@ -328,4 +321,4 @@ export default function AdminUsersPage() {
       </div>
     </div>
   );
-}
+} 
