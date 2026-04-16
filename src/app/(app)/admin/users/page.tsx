@@ -112,18 +112,14 @@ export default function AdminUsersPage() {
 
   const userType = mapUserType(role); // 🔥 ADD THIS
 
-try {
   await updateDoc(doc(db, "users", id), {
     status: "approved",
     role,
-    userType,
+    userType, // 🔥 ADD THIS
   });
 
   loadUsers();
-} catch (err) {
-  console.error("Approve failed:", err);
-  alert("Failed to approve user");
-} 
+  } 
 
   // =============================
   // REJECT USER
@@ -325,4 +321,3 @@ try {
     </div>
   );
 } 
-}
