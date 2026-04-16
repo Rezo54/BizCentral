@@ -193,8 +193,7 @@ export default function AdminUsersPage() {
               <th onClick={() => handleSort("status")} className="p-3 text-left cursor-pointer">
                 Status {sortField === "status" ? (sortDirection === "asc" ? "▲" : "▼") : ""}</th>
               <th onClick={() => handleSort("role")} className="p-3 text-left cursor-pointer">
-                Role {sortField === "role" ? (sortDirection === "asc" ? "▲" : "▼") : ""}</th>                                   
-              <th className="p-3 text-left">Role</th>
+                Role {sortField === "role" ? (sortDirection === "asc" ? "▲" : "▼") : ""}</th>                       
               <th className="p-3 text-left">Actions</th>
             </tr>
           </thead>         
