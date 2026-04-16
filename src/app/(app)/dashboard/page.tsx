@@ -55,7 +55,7 @@ export default function DashboardPage() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">$45,231.89</div>
+            <div className="text-2xl font-bold">R45,231.89</div>
             <p className="text-xs text-muted-foreground">
               +20.1% from last month
             </p>
@@ -71,7 +71,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold">12</div>
             <p className="text-xs text-muted-foreground">
-              Totaling $12,050.00
+              Totaling R12,050.00
             </p>
           </CardContent>
         </Card>
