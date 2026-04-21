@@ -55,42 +55,34 @@ const MANAGEMENT_SECTION: NavSection = {
 const SETTINGS_SECTION: NavSection = {
   heading: "Admin Settings",
   items: [
-    {
-      href: "/admin/users",
-      label: "Users",
-      icon: Settings,
-      minAccess: "admin",
-    },
-    {
-      href: "/admin/upload-edo",
-      label: "Upload EDO Data",
-      icon: FileText,
-      minAccess: "admin",
-    },
-    {
-      href: "/admin/upload-reliever",
-      label: "Upload Relievers",
-      icon: FileText,
-      minAccess: "admin",
-    },
+    { href: "/admin/users", label: "Users", icon: Settings, minAccess: "admin" },
+    { href: "/admin/upload-edo", label: "Upload EDO Data", icon: FileText, minAccess: "admin" },
+    { href: "/admin/upload-reliever", label: "Upload Relievers", icon: FileText, minAccess: "admin" },
   ],
 };
 
-/** ---------- Render Helpers ---------- */
+/** ---------- Nav Row ---------- */
 
-function NavItemRow({ item, active }: { item: NavItem; active: boolean }) {
+function NavItemRow({
+  item,
+  active,
+  onClick,
+}: {
+  item: NavItem;
+  active: boolean;
+  onClick?: () => void;
+}) {
   const Icon = item.icon;
   return (
     <Link
       href={item.href}
-      aria-current={active ? "page" : undefined}
+      onClick={onClick}
       className={[
         "flex items-center gap-2 px-3 py-2 text-sm rounded-xl transition-colors",
         active
           ? "bg-[hsl(var(--sidebar-primary))] text-[hsl(var(--sidebar-primary-foreground))]"
           : "text-[hsl(var(--sidebar-foreground))]/80 hover:text-[hsl(var(--sidebar-foreground))]",
       ].join(" ")}
-      style={{ outlineColor: "hsl(var(--sidebar-ring))" }}
     >
       <Icon className="h-4 w-4" />
       <span>{item.label}</span>
@@ -102,40 +94,35 @@ function NavSectionBlock({
   section,
   pathname,
   user,
-  mutedHeading = false,
+  onItemClick,
 }: {
   section: NavSection;
   pathname: string;
   user: SessionUser;
-  mutedHeading?: boolean;
+  onItemClick?: () => void;
 }) {
   const visible = section.items.filter((i) => hasAccess(user, i.minAccess));
-  if (visible.length === 0) return null;
+  if (!visible.length) return null;
 
   return (
     <div className="space-y-2">
       {section.heading && (
-        <div
-          className={[
-            "px-1 text-xs uppercase tracking-wide",
-            mutedHeading
-              ? "text-[hsl(var(--sidebar-foreground))]/50"
-              : "text-[hsl(var(--sidebar-foreground))]/80",
-          ].join(" ")}
-        >
+        <div className="px-1 text-xs uppercase tracking-wide text-[hsl(var(--sidebar-foreground))]/60">
           {section.heading}
         </div>
       )}
 
       <nav className="flex flex-col gap-1">
         {visible.map((i) => {
-          const active =
-            pathname === i.href ||
-            (pathname.startsWith(i.href + "/") &&
-              !pathname.includes("/admin/upload-edo") &&
-              !pathname.includes("/admin/upload-reliever"));
-
-          return <NavItemRow key={i.href} item={i} active={active} />;
+          const active = pathname.startsWith(i.href);
+          return (
+            <NavItemRow
+              key={i.href}
+              item={i}
+              active={active}
+              onClick={onItemClick}
+            />
+          );
         })}
       </nav>
     </div>
@@ -149,6 +136,7 @@ export default function AppGroupLayout({ children }: PropsWithChildren) {
 
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     async function loadUser() {
@@ -159,77 +147,77 @@ export default function AppGroupLayout({ children }: PropsWithChildren) {
     loadUser();
   }, []);
 
-  if (loading) return null;
-  if (!user) return null;
+  if (loading || !user) return null;
 
   return (
     <div className="min-h-dvh flex">
 
-      {/* 🔥 FIXED SIDEBAR */}
+      {/* 🔥 MOBILE HEADER */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between p-4 border-b bg-white">
+        <button onClick={() => setMenuOpen(true)}>☰</button>
+        <span className="font-bold">BizCentral</span>
+      </div>
+
+      {/* 🔥 SIDEBAR */}
       <aside
-        className="hidden md:flex fixed left-0 top-0 h-screen w-64 flex-col gap-4 border-r p-4"
+        className={`
+          fixed top-0 left-0 h-screen w-64 flex flex-col gap-4 border-r p-4 z-50
+          transform transition-transform duration-300
+          ${menuOpen ? "translate-x-0" : "-translate-x-full"}
+          md:translate-x-0
+        `}
         style={{
           backgroundColor: "hsl(var(--sidebar-background))",
           color: "hsl(var(--sidebar-foreground))",
-          borderColor: "hsl(var(--sidebar-border))",
         }}
       >
+        {/* CLOSE BUTTON (MOBILE) */}
+        <button
+          className="md:hidden text-right mb-2"
+          onClick={() => setMenuOpen(false)}
+        >
+          ✕ Close
+        </button>
+
         {/* Brand */}
-        <div className="px-1 flex flex-col items-start gap-2">
-          <img src="/logo.png" alt="Taskraft" className="h-7 w-auto" />
-          <span className="flex items-center gap-1 font-bold">
-            Bi
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              className="inline-block relative top-[2px] rotate-[-339deg]"
-              style={{ filter: "drop-shadow(0 0 4px #facc15)" }}
-            >
-              <path
-                d="M4 8 L20 1 L10 10 L22 14 L5 21 L14 11 L4 10 Z"
-                fill="#facc15"
-              />
-            </svg>
-            Central
-          </span>
+        <div className="flex flex-col gap-2">
+          <img src="/logo.png" className="h-7" />
+          <span className="font-bold">BizCentral</span>
         </div>
 
-        {/* 🔥 SCROLLABLE MENU */}
+        {/* NAV */}
         <div className="flex-1 overflow-y-auto space-y-4">
-          <NavSectionBlock section={DASHBOARD_SECTION} pathname={pathname} user={user} />
-          <NavSectionBlock section={MANAGEMENT_SECTION} pathname={pathname} user={user} mutedHeading />
-          <NavSectionBlock section={SETTINGS_SECTION} pathname={pathname} user={user} mutedHeading />
+          <NavSectionBlock section={DASHBOARD_SECTION} pathname={pathname} user={user} onItemClick={() => setMenuOpen(false)} />
+          <NavSectionBlock section={MANAGEMENT_SECTION} pathname={pathname} user={user} onItemClick={() => setMenuOpen(false)} />
+          <NavSectionBlock section={SETTINGS_SECTION} pathname={pathname} user={user} onItemClick={() => setMenuOpen(false)} />
         </div>
 
-        {/* Signed-in */}
-        <div className="px-1 text-xs text-[hsl(var(--sidebar-foreground))]/60">
-          Signed in as <span className="font-medium">{user.name}</span>
+        {/* USER */}
+        <div className="text-xs">
+          Signed in as <b>{user.name}</b>
         </div>
 
-        {/* 🔥 LOGOUT LOCKED BOTTOM */}
-        <div className="pt-4">
-          <Button
-            variant="outline"
-            className="w-full text-muted-foreground hover:text-foreground"
-            onClick={async () => {
-              try {
-                const auth = getAuth();
-                await signOut(auth);
-              } catch (e) {
-                console.error("Logout failed", e);
-              }
-
-              window.location.href = "/";
-            }}
-          >
-            Logout
-          </Button>
-        </div>
+        {/* LOGOUT */}
+        <Button
+          onClick={async () => {
+            await signOut(getAuth());
+            window.location.href = "/";
+          }}
+        >
+          Logout
+        </Button>
       </aside>
 
-      {/* 🔥 MAIN CONTENT */}
-      <main className="flex-1 p-6 md:ml-64">
+      {/* 🔥 OVERLAY */}
+      {menuOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-40 md:hidden"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
+
+      {/* 🔥 MAIN */}
+      <main className="flex-1 p-6 md:ml-64 mt-16 md:mt-0">
         {children}
       </main>
     </div>
