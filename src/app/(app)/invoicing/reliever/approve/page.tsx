@@ -179,7 +179,7 @@ export default function RelieverApprovePage() {
                     <td>{formatDate(r.date)}</td>
                     <td>{r.relieverCompanyId}</td>
                     <td>{labelType(r.reliefType)}</td>
-                    <td>{r.companyName}</td>
+                    <td>{r.edoName}</td>
                     <td>{r.routeCode}</td>
                     <td>R {Number(r.amount).toFixed(2)}</td>
                     <td>
