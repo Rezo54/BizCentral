@@ -180,28 +180,35 @@ export default function AppGroupLayout({ children }: PropsWithChildren) {
         </button>
 
         {/* Brand */}
-        <div className="flex flex-col gap-2">
-          <img src="/logo.png" className="h-7 w-auto" />
-          <span className="flex items-center gap-1 font-bold">
-            Bi
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          className="inline-block relative top-[2px] rotate-[-339deg]"
-          style={{ filter: "drop-shadow(0 0 4px #facc15)" }}
-        >
-          <path
-            d="M4 8 
-              L20 1 
-              L10 10              
-              L22 14 
-              L5 21 
-              L14 11 
-              L4 10 Z"
-            fill="#facc15"
+        <div className="flex flex-col items-center text-center gap-2">
+  
+          {/* LOGO */}
+          <img
+            src="/logo.png"
+            className="h-7 max-w-[120px] object-contain"
           />
-        </svg>
+
+          {/* TITLE */}
+          <span className="flex items-center justify-center gap-1 font-bold">
+            Bi
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              className="inline-block relative top-[2px] rotate-[-339deg]"
+              style={{ filter: "drop-shadow(0 0 4px #facc15)" }}
+            >
+              <path
+                d="M4 8 
+                  L20 1 
+                  L10 10              
+                  L22 14 
+                  L5 21 
+                  L14 11 
+                  L4 10 Z"
+                fill="#facc15"
+              />
+            </svg>
             Central
           </span>
 
