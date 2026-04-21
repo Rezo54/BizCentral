@@ -183,7 +183,7 @@ export default function AppGroupLayout({ children }: PropsWithChildren) {
         <div className="flex flex-col gap-2">
   
         {/* 🔥 LOGO (CENTERED + BIGGER) */}
-        <div className="flex justify-center">
+        <div className="flex justify-center mb-2">
           <img
             src="/logo.png"
             className="h-10 max-w-[150px] object-contain"
@@ -197,7 +197,7 @@ export default function AppGroupLayout({ children }: PropsWithChildren) {
             width="18"
             height="18"
             viewBox="0 0 24 24"
-            className="inline-block relative top-[2px] rotate-[-339deg]"
+            className="inline-block relative top-[2px] rotate-[-339deg] scale-x-[-1]"
             style={{ filter: "drop-shadow(0 0 4px #facc15)" }}
           >
             <path
