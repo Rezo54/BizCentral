@@ -181,8 +181,30 @@ export default function AppGroupLayout({ children }: PropsWithChildren) {
 
         {/* Brand */}
         <div className="flex flex-col gap-2">
-          <img src="/logo.png" className="h-7" />
-          <span className="font-bold">BizCentral</span>
+          <img src="/logo.png" className="h-7 w-auto" />
+          <span className="flex items-center gap-1 font-bold">
+            Bi
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          className="inline-block relative top-[2px] rotate-[-339deg]"
+          style={{ filter: "drop-shadow(0 0 4px #facc15)" }}
+        >
+          <path
+            d="M4 8 
+              L20 1 
+              L10 10              
+              L22 14 
+              L5 21 
+              L14 11 
+              L4 10 Z"
+            fill="#facc15"
+          />
+        </svg>
+            Central
+          </span>
+
         </div>
 
         {/* NAV */}
