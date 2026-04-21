@@ -226,8 +226,7 @@ export default function AppGroupLayout({ children }: PropsWithChildren) {
         {/* USER */}
         <div className="text-xs">
           Signed in as <b>{user.name}</b>
-        </div>
-
+        
         {/* LOGOUT */}
         <Button
           onClick={async () => {
@@ -237,6 +236,7 @@ export default function AppGroupLayout({ children }: PropsWithChildren) {
         >
           Logout
         </Button>
+        </div>        
       </aside>
 
       {/* 🔥 OVERLAY */}
