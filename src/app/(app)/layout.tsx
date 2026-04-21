@@ -161,7 +161,7 @@ export default function AppGroupLayout({ children }: PropsWithChildren) {
       {/* 🔥 SIDEBAR */}
       <aside
         className={`
-          fixed top-0 left-0 h-screen w-64 flex flex-col gap-4 border-r p-4 z-50
+          fixed top-0 left-0 h-screen w-64 flex flex-col gap-3 border-r p-4 z-50
           transform transition-transform duration-300
           ${menuOpen ? "translate-x-0" : "-translate-x-full"}
           md:translate-x-0
@@ -217,18 +217,20 @@ export default function AppGroupLayout({ children }: PropsWithChildren) {
       </div>
 
         {/* NAV */}
-        <div className="flex-1 overflow-y-auto space-y-4">
+        <div className="flex-1 overflow-y-auto space-y-3">
           <NavSectionBlock section={DASHBOARD_SECTION} pathname={pathname} user={user} onItemClick={() => setMenuOpen(false)} />
           <NavSectionBlock section={MANAGEMENT_SECTION} pathname={pathname} user={user} onItemClick={() => setMenuOpen(false)} />
           <NavSectionBlock section={SETTINGS_SECTION} pathname={pathname} user={user} onItemClick={() => setMenuOpen(false)} />
         </div>
 
         {/* USER */}
-        <div className="text-xs">
+        <div className="text-xs mt-2">
           Signed in as <b>{user.name}</b>
-        
+        </div>
         {/* LOGOUT */}
         <Button
+          variant="outline"
+          className="w-full text-gray-500 hover:text-blue-600 hover:bg-blue-50 border-gray-300"
           onClick={async () => {
             await signOut(getAuth());
             window.location.href = "/";
@@ -236,7 +238,6 @@ export default function AppGroupLayout({ children }: PropsWithChildren) {
         >
           Logout
         </Button>
-        </div>        
       </aside>
 
       {/* 🔥 OVERLAY */}
