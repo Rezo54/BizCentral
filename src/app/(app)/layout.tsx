@@ -197,7 +197,7 @@ export default function AppGroupLayout({ children }: PropsWithChildren) {
             width="18"
             height="18"
             viewBox="0 0 24 24"
-            className="inline-block relative top-[2px] rotate-[-368deg] scale-x-[-1]"
+            className="inline-block relative top-[2px] rotate-[-380deg] scale-x-[-1]"
             style={{ filter: "drop-shadow(0 0 4px #facc15)" }}
           >
             <path
