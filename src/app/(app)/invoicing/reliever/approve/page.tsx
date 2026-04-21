@@ -167,6 +167,7 @@ export default function RelieverApprovePage() {
                   <th className="text-left py-2">Date</th>
                   <th className="text-left py-2">Reliever</th>
                   <th className="text-left py-2">Type</th>
+                  <th className="text-left py-2">Company</th>
                   <th className="text-left py-2">Route</th>
                   <th className="text-left py-2">Amount</th>
                   <th></th>
@@ -178,6 +179,7 @@ export default function RelieverApprovePage() {
                     <td>{formatDate(r.date)}</td>
                     <td>{r.relieverCompanyId}</td>
                     <td>{labelType(r.reliefType)}</td>
+                    <td>{r.companyName}</td>
                     <td>{r.routeCode}</td>
                     <td>R {Number(r.amount).toFixed(2)}</td>
                     <td>
