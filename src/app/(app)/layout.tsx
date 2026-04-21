@@ -191,27 +191,27 @@ export default function AppGroupLayout({ children }: PropsWithChildren) {
         </div>
 
         {/* 🔥 TITLE (LEFT ALIGNED) */}
-        <span className="flex items-center gap-1 font-bold">
-          Bi
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            className="inline-block relative top-[2px] rotate-[-383deg] scale-x-[-1]"
-            style={{ filter: "drop-shadow(0 0 4px #facc15)" }}
-          >
-            <path
-              d="M4 8 
-                L20 1 
-                L10 10              
-                L22 14 
-                L5 21 
-                L14 11 
-                L4 10 Z"
-              fill="#facc15"
-            />
-          </svg>
-          Central
+        <span className="flex items-center font-bold">
+          <span className="mr-[-2px]">Bi</span>          
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              className="inline-block relative top-[2px] rotate-[-383deg] scale-x-[-1]"
+              style={{ filter: "drop-shadow(0 0 4px #facc15)" }}
+            >
+              <path
+                d="M4 8 
+                  L20 1 
+                  L10 10              
+                  L22 14 
+                  L5 21 
+                  L14 11 
+                  L4 10 Z"
+                fill="#facc15"
+              />
+            </svg>
+          <span className="ml-[-2px]">Central</span>
         </span>
 
       </div>
