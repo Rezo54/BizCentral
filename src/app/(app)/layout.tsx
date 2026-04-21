@@ -1,5 +1,3 @@
-//src/app/(app)/layout.tsx
-
 "use client";
 
 import Link from "next/link";
@@ -116,7 +114,7 @@ function NavSectionBlock({
 
   return (
     <div className="space-y-2">
-      {section.heading ? (
+      {section.heading && (
         <div
           className={[
             "px-1 text-xs uppercase tracking-wide",
@@ -127,7 +125,7 @@ function NavSectionBlock({
         >
           {section.heading}
         </div>
-      ) : null}
+      )}
 
       <nav className="flex flex-col gap-1">
         {visible.map((i) => {
@@ -161,15 +159,15 @@ export default function AppGroupLayout({ children }: PropsWithChildren) {
     loadUser();
   }, []);
 
-  // 🔒 Prevent wrong render (THIS FIXES YOUR BUG)
   if (loading) return null;
   if (!user) return null;
 
   return (
-    <div className="min-h-dvh flex flex-col md:flex-row">
-      {/* Sidebar */}
+    <div className="min-h-dvh flex">
+
+      {/* 🔥 FIXED SIDEBAR */}
       <aside
-        className="w-full md:w-64 shrink-0 flex flex-col gap-4 border-b md:border-b-0 md:border-r p-4"
+        className="hidden md:flex fixed left-0 top-0 h-screen w-64 flex-col gap-4 border-r p-4"
         style={{
           backgroundColor: "hsl(var(--sidebar-background))",
           color: "hsl(var(--sidebar-foreground))",
@@ -181,71 +179,59 @@ export default function AppGroupLayout({ children }: PropsWithChildren) {
           <img src="/logo.png" alt="Taskraft" className="h-7 w-auto" />
           <span className="flex items-center gap-1 font-bold">
             Bi
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          className="inline-block relative top-[2px] rotate-[-339deg]"
-          style={{ filter: "drop-shadow(0 0 4px #facc15)" }}
-        >
-          <path
-            d="M4 8 
-              L20 1 
-              L10 10              
-              L22 14 
-              L5 21 
-              L14 11 
-              L4 10 Z"
-            fill="#facc15"
-          />
-        </svg>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              className="inline-block relative top-[2px] rotate-[-339deg]"
+              style={{ filter: "drop-shadow(0 0 4px #facc15)" }}
+            >
+              <path
+                d="M4 8 L20 1 L10 10 L22 14 L5 21 L14 11 L4 10 Z"
+                fill="#facc15"
+              />
+            </svg>
             Central
           </span>
         </div>
 
-        {/* Nav sections */}
-        <NavSectionBlock section={DASHBOARD_SECTION} pathname={pathname} user={user} />
-        <NavSectionBlock
-          section={MANAGEMENT_SECTION}
-          pathname={pathname}
-          user={user}
-          mutedHeading
-        />
-        <NavSectionBlock
-          section={SETTINGS_SECTION}
-          pathname={pathname}
-          user={user}
-          mutedHeading
-        />
+        {/* 🔥 SCROLLABLE MENU */}
+        <div className="flex-1 overflow-y-auto space-y-4">
+          <NavSectionBlock section={DASHBOARD_SECTION} pathname={pathname} user={user} />
+          <NavSectionBlock section={MANAGEMENT_SECTION} pathname={pathname} user={user} mutedHeading />
+          <NavSectionBlock section={SETTINGS_SECTION} pathname={pathname} user={user} mutedHeading />
+        </div>
 
-        {/* Signed-in badge */}
-        <div className="mt-auto mb-2 px-1 text-xs text-[hsl(var(--sidebar-foreground))]/60">
+        {/* Signed-in */}
+        <div className="px-1 text-xs text-[hsl(var(--sidebar-foreground))]/60">
           Signed in as <span className="font-medium">{user.name}</span>
         </div>
 
-        {/* Logout */}
-       <div className="mt-auto pt-6">
-            <Button
-              variant="outline"
-              className="w-full text-muted-foreground hover:text-foreground"
-              onClick={async () => {
-                try {
-                  const auth = getAuth();
-                  await signOut(auth);
-                } catch (e) {
-                  console.error("Logout failed", e);
-                }
+        {/* 🔥 LOGOUT LOCKED BOTTOM */}
+        <div className="pt-4">
+          <Button
+            variant="outline"
+            className="w-full text-muted-foreground hover:text-foreground"
+            onClick={async () => {
+              try {
+                const auth = getAuth();
+                await signOut(auth);
+              } catch (e) {
+                console.error("Logout failed", e);
+              }
 
-                window.location.href = "/";
-              }}
-            >
-              Logout
-            </Button>
-</div>
+              window.location.href = "/";
+            }}
+          >
+            Logout
+          </Button>
+        </div>
       </aside>
 
-      {/* Main content */}
-      <main className="flex-1 p-6">{children}</main>
+      {/* 🔥 MAIN CONTENT */}
+      <main className="flex-1 p-6 md:ml-64">
+        {children}
+      </main>
     </div>
   );
 }

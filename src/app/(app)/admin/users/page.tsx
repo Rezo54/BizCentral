@@ -43,7 +43,7 @@ export default function AdminUsersPage() {
 
   const superadmin =
   currentUser?.accessLevel === "superadmin" ||
-  currentUser?.role === "superadmin";
+  currentUser?.role === "admin_user";
 
   const [sortField, setSortField] = useState<string>("name"); // 🔥 DEFAULT SORT FIELD, added 16/04/2026
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
