@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
 import {
   collection,
@@ -20,7 +20,6 @@ import {
   CardTitle,
   CardContent,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 
 export default function RelieverApprovePage() {
   const [rows, setRows] = useState<any[]>([]);
@@ -28,18 +27,12 @@ export default function RelieverApprovePage() {
   const [user, setUser] = useState<any>(null);
 
   // =============================
-  // FILTER STATE
+  // FILTER STATE (SAFE)
   // =============================
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [edoFilter, setEdoFilter] = useState("all");
   const [relieverFilter, setRelieverFilter] = useState("all");
-
-  // =============================
-  // SORT STATE
-  // =============================
-  const [sortField, setSortField] = useState("date");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   // =============================
   // LOAD DATA
@@ -83,6 +76,7 @@ export default function RelieverApprovePage() {
   const admin = user.accessLevel === "admin";
   const superadmin = user.accessLevel === "superadmin";
 
+  // ❌ BLOCK RELIEVER
   if (reliever) {
     return <NoAccess hint="Relievers cannot approve invoices" />;
   }
@@ -94,58 +88,38 @@ export default function RelieverApprovePage() {
   const canApprove = edo || superadmin;
 
   // =============================
-  // DROPDOWNS
+  // FILTER LOGIC (SAFE)
   // =============================
-  const edoOptions = useMemo(() => {
-    return Array.from(new Set(rows.map((r) => r.edoName))).filter(Boolean);
-  }, [rows]);
+  let filtered = [...rows];
 
-  const relieverOptions = useMemo(() => {
-    return Array.from(new Set(rows.map((r) => r.relieverCompanyId))).filter(Boolean);
-  }, [rows]);
+  if (from) {
+    filtered = filtered.filter((r: any) => r.date >= from);
+  }
 
-  // =============================
-  // FILTER + SORT
-  // =============================
-  const processed = useMemo(() => {
-    let data = [...rows];
+  if (to) {
+    filtered = filtered.filter((r: any) => r.date <= to);
+  }
 
-    if (from) data = data.filter((r) => r.date >= from);
-    if (to) data = data.filter((r) => r.date <= to);
+  if (edoFilter !== "all") {
+    filtered = filtered.filter(
+      (r: any) => r.edoName === edoFilter
+    );
+  }
 
-    if (edoFilter !== "all") {
-      data = data.filter((r) => r.edoName === edoFilter);
-    }
-
-    if (relieverFilter !== "all") {
-      data = data.filter((r) => r.relieverCompanyId === relieverFilter);
-    }
-
-    data.sort((a, b) => {
-      let valA = a[sortField];
-      let valB = b[sortField];
-
-      if (sortField === "amount") {
-        valA = Number(valA);
-        valB = Number(valB);
-      }
-
-      if (valA < valB) return sortDir === "asc" ? -1 : 1;
-      if (valA > valB) return sortDir === "asc" ? 1 : -1;
-      return 0;
-    });
-
-    return data;
-  }, [rows, from, to, edoFilter, relieverFilter, sortField, sortDir]);
+  if (relieverFilter !== "all") {
+    filtered = filtered.filter(
+      (r: any) => r.relieverCompanyId === relieverFilter
+    );
+  }
 
   // =============================
-  // SPLIT
+  // SPLIT DATA
   // =============================
-  const pending = processed.filter((r) => r.status === "pending");
-  const history = processed.filter((r) => r.status !== "pending");
+  const pending = filtered.filter((r: any) => r.status === "pending");
+  const history = filtered.filter((r: any) => r.status !== "pending");
 
   // =============================
-  // ACTIONS
+  // APPROVE
   // =============================
   async function handleApprove(id: string) {
     if (!canApprove) return;
@@ -158,11 +132,16 @@ export default function RelieverApprovePage() {
 
     setRows((prev) =>
       prev.map((r) =>
-        r.id === id ? { ...r, status: "approved" } : r
+        r.id === id
+          ? { ...r, status: "approved", approvedBy: user.name }
+          : r
       )
     );
   }
 
+  // =============================
+  // REJECT
+  // =============================
   async function handleReject(id: string) {
     if (!canApprove) return;
 
@@ -174,7 +153,9 @@ export default function RelieverApprovePage() {
 
     setRows((prev) =>
       prev.map((r) =>
-        r.id === id ? { ...r, status: "rejected" } : r
+        r.id === id
+          ? { ...r, status: "rejected", rejectedBy: user.name }
+          : r
       )
     );
   }
@@ -184,8 +165,6 @@ export default function RelieverApprovePage() {
   // =============================
   return (
     <div className="space-y-6 p-6">
-
-      {/* HEADER */}
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">
@@ -201,42 +180,53 @@ export default function RelieverApprovePage() {
         </Button>
       </header>
 
-      {/* FILTER BAR */}
+      {/* ================= FILTERS ================= */}
       <Card>
         <CardHeader>
-          <CardTitle>Filters & Sorting</CardTitle>
+          <CardTitle>Filters</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 md:grid-cols-6 gap-3">
-          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-3">
 
-          <select value={edoFilter} onChange={(e) => setEdoFilter(e.target.value)}>
+          <input
+            type="date"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            className="border p-2 rounded"
+          />
+
+          <input
+            type="date"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            className="border p-2 rounded"
+          />
+
+          <select
+            value={edoFilter}
+            onChange={(e) => setEdoFilter(e.target.value)}
+            className="border p-2 rounded"
+          >
             <option value="all">All EDOs</option>
-            {edoOptions.map((e) => (
+            {[...new Set(rows.map((r) => r.edoName))].map((e) => (
               <option key={e}>{e}</option>
             ))}
           </select>
 
-          <select value={relieverFilter} onChange={(e) => setRelieverFilter(e.target.value)}>
+          <select
+            value={relieverFilter}
+            onChange={(e) => setRelieverFilter(e.target.value)}
+            className="border p-2 rounded"
+          >
             <option value="all">All Relievers</option>
-            {relieverOptions.map((r) => (
+            {[...new Set(rows.map((r) => r.relieverCompanyId))].map((r) => (
               <option key={r}>{r}</option>
             ))}
           </select>
 
-          <select value={sortField} onChange={(e) => setSortField(e.target.value)}>
-            <option value="date">Date</option>
-            <option value="amount">Amount</option>
-          </select>
-
-          <select value={sortDir} onChange={(e) => setSortDir(e.target.value as any)}>
-            <option value="desc">Desc</option>
-            <option value="asc">Asc</option>
-          </select>
         </CardContent>
       </Card>
 
-      {/* PENDING */}
+      {/* ================= PENDING ================= */}
       <Card>
         <CardHeader>
           <CardTitle>Pending Invoices</CardTitle>
@@ -271,8 +261,13 @@ export default function RelieverApprovePage() {
                     <td>
                       {canApprove && (
                         <div className="flex gap-2">
-                          <Button onClick={() => handleApprove(r.id)}>Approve</Button>
-                          <Button variant="destructive" onClick={() => handleReject(r.id)}>
+                          <Button onClick={() => handleApprove(r.id)}>
+                            Approve
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            onClick={() => handleReject(r.id)}
+                          >
                             Reject
                           </Button>
                         </div>
@@ -286,7 +281,7 @@ export default function RelieverApprovePage() {
         </CardContent>
       </Card>
 
-      {/* HISTORY */}
+      {/* ================= HISTORY ================= */}
       <Card>
         <CardHeader>
           <CardTitle>History</CardTitle>
@@ -312,11 +307,17 @@ export default function RelieverApprovePage() {
                   <tr key={r.id} className="border-b hover:bg-gray-50">
                     <td className="py-2 px-2">{formatDate(r.date)}</td>
                     <td className="py-2 px-2">{r.relieverCompanyId}</td>
-                    <td className="py-2 px-2">{labelType(r.reliefType)}</td>
+                    <td className="py-2 px-2 whitespace-nowrap">
+                      {labelType(r.reliefType)}
+                    </td>
                     <td className="py-2 px-2">{r.routeCode}</td>
-                    <td className="py-2 px-2 font-medium">R {Number(r.amount).toFixed(2)}</td>
+                    <td className="py-2 px-2 font-medium">
+                      R {Number(r.amount).toFixed(2)}
+                    </td>
                     <td className="py-2 px-2 capitalize">{r.status}</td>
-                    <td className="py-2 px-2">{r.approvedBy || r.rejectedBy || "-"}</td>
+                    <td className="py-2 px-2">
+                      {r.approvedBy || r.rejectedBy || "-"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -328,7 +329,9 @@ export default function RelieverApprovePage() {
   );
 }
 
+// =============================
 // HELPERS
+// =============================
 function labelType(t: string): string {
   switch (t) {
     case "day":
