@@ -207,8 +207,11 @@ export default function RelieverApprovePage() {
             className="border p-2 rounded"
           >
             <option value="all">All EDOs</option>
-            {[...new Set(rows.map((r) => r.edoName))].map((e) => (
-              <option key={e}>{e}</option>
+           {[...new Set(rows.map((r) => r.edoName))]
+              .filter(Boolean)
+              .sort((a, b) => a.localeCompare(b))
+              .map((e) => (
+                <option key={e}>{e}</option>
             ))}
           </select>
 
@@ -218,8 +221,11 @@ export default function RelieverApprovePage() {
             className="border p-2 rounded"
           >
             <option value="all">All Relievers</option>
-            {[...new Set(rows.map((r) => r.relieverCompanyId))].map((r) => (
-              <option key={r}>{r}</option>
+            {[...new Set(rows.map((r) => r.relieverCompanyId))]
+              .filter(Boolean)
+              .sort((a, b) => a.localeCompare(b))
+              .map((r) => (
+                <option key={r}>{r}</option>
             ))}
           </select>
 
