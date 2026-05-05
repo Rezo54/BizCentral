@@ -54,7 +54,7 @@ export default function RelieverInvoicingPage() {
   const [to, setTo] = useState("");
   const [edoFilter, setEdoFilter] = useState("all");
 
-  // EDIT MODAL STATE
+  // EDIT MODAL
   const [editing, setEditing] = useState<RelieverInvoice | null>(null);
   const [editDate, setEditDate] = useState("");
   const [editType, setEditType] = useState<ReliefType>("day");
@@ -124,8 +124,9 @@ export default function RelieverInvoicingPage() {
   if (loading) return <div className="p-6">Loading...</div>;
   if (!user) return <div className="p-6">User not found</div>;
 
-  const isReliever = user.userType === "reliever";
-  if (!isReliever) return <NoAccess hint="Reliever access only" />;
+  if (user.userType !== "reliever") {
+    return <NoAccess hint="Reliever access only" />;
+  }
 
   // =============================
   // FILTER LOGIC
@@ -200,10 +201,10 @@ export default function RelieverInvoicingPage() {
   // UI
   // =============================
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4">
 
-      <header className="flex justify-between">
-        <h1 className="text-2xl font-semibold">Reliever Invoicing</h1>
+      <header className="flex justify-between items-center">
+        <h1 className="text-xl font-semibold">Reliever Invoicing</h1>
         <Button asChild variant="outline">
           <Link href="/invoicing/reliever/summary">Summary</Link>
         </Button>
@@ -214,7 +215,7 @@ export default function RelieverInvoicingPage() {
         <CardHeader>
           <CardTitle>Filters</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-3 gap-3">
+        <CardContent className="grid gap-3 grid-cols-1 md:grid-cols-3">
 
           <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="border p-2 rounded" />
           <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="border p-2 rounded" />
@@ -231,14 +232,104 @@ export default function RelieverInvoicingPage() {
         </CardContent>
       </Card>
 
+      {/* FORM */}
+      <Card>
+        <CardHeader>
+          <CardTitle>New Relief Invoice</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="grid gap-4 grid-cols-1 md:grid-cols-5"
+          >
+
+            {/* DATE */}
+            <div className="flex flex-col">
+              <label className="text-xs font-medium mb-1">Select date</label>
+              <input
+                type="date"
+                max={new Date().toISOString().split("T")[0]}
+                className="w-full rounded-md border px-3 py-2 text-sm"
+                {...form.register("date")}
+              />
+            </div>
+
+            {/* EDO */}
+            <div className="flex flex-col">
+              <label className="text-xs font-medium mb-1">Select EDO</label>
+              <select
+                className="w-full rounded-md border px-3 py-2 text-sm"
+                {...form.register("edoId")}
+              >
+                <option value="">Choose EDO</option>
+                {edos.map((edo) => (
+                  <option key={edo.id} value={edo.id}>
+                    {edo.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* ROUTE */}
+            <div className="flex flex-col">
+              <label className="text-xs font-medium mb-1">Select route</label>
+              <select
+                className="w-full rounded-md border px-3 py-2 text-sm"
+                {...form.register("routeCode")}
+                disabled={!selectedEdoId}
+              >
+                <option value="">
+                  {selectedEdoId ? "Choose route" : "Select EDO first"}
+                </option>
+                {routes.map((route) => (
+                  <option key={route.id} value={route.code}>
+                    {route.code} - {route.description}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* TYPE */}
+            <div className="flex flex-col">
+              <label className="text-xs font-medium mb-1">Type of relief</label>
+              <select
+                className="w-full rounded-md border px-3 py-2 text-sm"
+                {...form.register("reliefType")}
+              >
+                <option value="day">Day Relief</option>
+                <option value="second_delivery">Second Delivery</option>
+                <option value="sunday_ph">Sunday / Public Holiday</option>
+              </select>
+            </div>
+
+            {/* RATE */}
+            <div className="flex flex-col justify-end">
+              <div className="text-xs text-muted-foreground">Rate</div>
+              <div className="text-lg font-semibold">
+                R {currentRate.toFixed(2)}
+              </div>
+
+              <Button type="submit" className="mt-2 w-full">
+                Submit
+              </Button>
+            </div>
+
+          </form>
+        </CardContent>
+      </Card>
+
       {/* SUMMARY */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <SummaryCard title="Pending" rows={pending} onEdit={(r) => {
-          setEditing(r);
-          setEditDate(r.date);
-          setEditType(r.reliefType);
-        }} onDelete={handleDelete} />
-
+        <SummaryCard
+          title="Pending"
+          rows={pending}
+          onEdit={(r: any) => {
+            setEditing(r);
+            setEditDate(r.date);
+            setEditType(r.reliefType);
+          }}
+          onDelete={handleDelete}
+        />
         <SummaryCard title="Approved" rows={approved} />
         <SummaryCard title="Rejected" rows={rejected} />
       </div>
@@ -277,6 +368,7 @@ export default function RelieverInvoicingPage() {
           </div>
         </div>
       )}
+
     </div>
   );
 }
@@ -291,31 +383,43 @@ function SummaryCard({ title, rows, onEdit, onDelete }: any) {
         <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        {rows.map((r: any) => (
-          <div key={r.id} className="flex justify-between items-center border-b py-2">
+        {rows.length === 0 ? (
+          <div className="text-sm text-muted-foreground">
+            No items
+          </div>
+        ) : (
+          rows.map((r: any) => (
+            <div key={r.id} className="flex justify-between items-center border-b py-2">
 
-            <div>
-              {r.date} · {r.routeCode}
-              <div className="text-xs text-muted-foreground">
-                {r.edoName}
+              <div>
+                {r.date} · {r.routeCode}
+                <div className="text-xs text-muted-foreground">
+                  {r.edoName}
+                </div>
+              </div>
+
+              <div className="flex gap-2 items-center">
+                R {r.amount.toFixed(2)}
+
+                {title === "Pending" && (
+                  <>
+                    <Button size="sm" onClick={() => onEdit(r)}>
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => onDelete(r.id)}
+                    >
+                      Delete
+                    </Button>
+                  </>
+                )}
+
               </div>
             </div>
-
-            <div className="flex gap-2 items-center">
-              R {r.amount.toFixed(2)}
-
-              {title === "Pending" && (
-                <>
-                  <Button size="sm" onClick={() => onEdit(r)}>Edit</Button>
-                  <Button size="sm" variant="destructive" onClick={() => onDelete(r.id)}>
-                    Delete
-                  </Button>
-                </>
-              )}
-
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </CardContent>
     </Card>
   );
