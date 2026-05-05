@@ -1,11 +1,12 @@
-//src/app/(app)/invoicing/page.tsx
-
 "use client";
 
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+
+import { db } from "@/lib/firebase";
+import { doc, updateDoc, deleteDoc } from "firebase/firestore";
 
 import { getCurrentUser } from "@/lib/session";
 import NoAccess from "@/components/no-access";
@@ -42,18 +43,22 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 export default function RelieverInvoicingPage() {
-  // =============================
-  // STATE
-  // =============================
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [edos, setEdos] = useState<any[]>([]);
   const [routes, setRoutes] = useState<any[]>([]);
   const [rows, setRows] = useState<RelieverInvoice[]>([]);
 
-  // =============================
-  // FORM
-  // =============================
+  // FILTERS
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [edoFilter, setEdoFilter] = useState("all");
+
+  // EDIT MODAL STATE
+  const [editing, setEditing] = useState<RelieverInvoice | null>(null);
+  const [editDate, setEditDate] = useState("");
+  const [editType, setEditType] = useState<ReliefType>("day");
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -79,9 +84,7 @@ export default function RelieverInvoicingPage() {
     loadUser();
   }, []);
 
-  // =============================
   // LOAD EDOS
-  // =============================
   useEffect(() => {
     async function loadEdos() {
       try {
@@ -94,75 +97,52 @@ export default function RelieverInvoicingPage() {
     loadEdos();
   }, []);
 
-  // =============================
   // LOAD ROUTES
-  // =============================
   useEffect(() => {
     async function loadRoutes() {
-      if (!selectedEdoId) {
-        setRoutes([]);
-        return;
-      }
-
-      try {
-        const data = await listRoutesForEdo(selectedEdoId);
-        setRoutes(data || []);
-      } catch {
-        setRoutes([]);
-      }
+      if (!selectedEdoId) return setRoutes([]);
+      const data = await listRoutesForEdo(selectedEdoId);
+      setRoutes(data || []);
     }
-
     loadRoutes();
   }, [selectedEdoId]);
 
-  // reset route when edo changes
   useEffect(() => {
     form.setValue("routeCode", "");
   }, [selectedEdoId]);
 
-  // =============================
   // LOAD INVOICES
-  // =============================
   useEffect(() => {
     async function loadInvoices() {
       if (!user?.relieverId) return;
-
-      try {
-        const data = await listInvoicesForRelieverCompany(user.relieverId);
-        setRows(data || []);
-      } catch {
-        setRows([]);
-      }
+      const data = await listInvoicesForRelieverCompany(user.relieverId);
+      setRows(data || []);
     }
-
     loadInvoices();
   }, [user]);
 
-  // =============================
-  // ACCESS CONTROL
-  // =============================
   if (loading) return <div className="p-6">Loading...</div>;
   if (!user) return <div className="p-6">User not found</div>;
 
-  const isReliever =
-    user.userType === "reliever" ||
-    user.role === "client_employee" ||
-    user.role === "supplier";
-
-  if (!isReliever) {
-    return <NoAccess hint="Reliever access only" />;
-  }
-
-  if (!user.relieverId) {
-    return <div className="p-6 text-red-600">Reliever not linked</div>;
-  }
+  const isReliever = user.userType === "reliever";
+  if (!isReliever) return <NoAccess hint="Reliever access only" />;
 
   // =============================
-  // RATE
+  // FILTER LOGIC
   // =============================
-  const currentRate = getRateFor(
-    (selectedType || "day") as ReliefType
-  );
+  let filtered = [...rows];
+
+  if (from) filtered = filtered.filter((r) => r.date >= from);
+  if (to) filtered = filtered.filter((r) => r.date <= to);
+  if (edoFilter !== "all") {
+    filtered = filtered.filter((r) => r.edoName === edoFilter);
+  }
+
+  const pending = filtered.filter((r) => r.status === "pending");
+  const approved = filtered.filter((r) => r.status === "approved");
+  const rejected = filtered.filter((r) => r.status === "rejected");
+
+  const currentRate = getRateFor(selectedType as ReliefType);
 
   // =============================
   // SUBMIT
@@ -171,150 +151,132 @@ export default function RelieverInvoicingPage() {
     const edo = edos.find((e) => e.id === values.edoId);
     const route = routes.find((r) => r.code === values.routeCode);
 
-    if (!edo || !route) {
-      alert("Invalid selection");
-      return;
-    }
+    if (!edo || !route) return;
+
     const invoice = await createRelieverInvoice({
       relieverUserId: user.uid,
       relieverBusinessName: user.name,
       relieverCompanyId: user.relieverId,
-
       edoId: edo.id,
-      edoName: edo.name,           
-
+      edoName: edo.name,
       date: values.date,
       routeCode: route.code,
       reliefType: values.reliefType,
     });
 
     setRows((prev) => [invoice, ...prev]);
-
-    form.reset({
-      date: "",
-      edoId: values.edoId,
-      routeCode: "",
-      reliefType: values.reliefType,
-    });
   }
 
-  const pending = rows.filter((r) => r.status === "pending");
-  const approved = rows.filter((r) => r.status === "approved");
-  const rejected = rows.filter((r) => r.status === "rejected");
+  // =============================
+  // UPDATE
+  // =============================
+  async function handleUpdate() {
+    if (!editing) return;
+
+    await updateDoc(doc(db, "invoices", editing.id), {
+      date: editDate,
+      reliefType: editType,
+    });
+
+    setRows((prev) =>
+      prev.map((r) =>
+        r.id === editing.id
+          ? { ...r, date: editDate, reliefType: editType }
+          : r
+      )
+    );
+
+    setEditing(null);
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete invoice?")) return;
+
+    await deleteDoc(doc(db, "invoices", id));
+    setRows((prev) => prev.filter((r) => r.id !== id));
+  }
 
   // =============================
-  // UI (YOUR ORIGINAL FORMAT)
+  // UI
   // =============================
   return (
     <div className="space-y-6">
-     <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-semibold">
-            Reliever Invoicing
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Capture your daily relief work and track approvals from EDOs.
-          </p>
-        </div>
 
-        <Button asChild variant="outline" size="sm">
-          <Link href="/invoicing/reliever/summary">View Summary</Link>
+      <header className="flex justify-between">
+        <h1 className="text-2xl font-semibold">Reliever Invoicing</h1>
+        <Button asChild variant="outline">
+          <Link href="/invoicing/reliever/summary">Summary</Link>
         </Button>
       </header>
 
+      {/* FILTERS */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">New Relief Invoice</CardTitle>
+          <CardTitle>Filters</CardTitle>
         </CardHeader>
-        <CardContent>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="grid gap-3 md:grid-cols-5 items-start"
-          >
-            <div>
-              <label className="block text-xs mb-1">Select date</label>
-              <input
-                type="date"
-                max={new Date().toISOString().split("T")[0]}
-                className="w-full rounded-md border px-3 py-2 text-sm bg-background"
-                {...form.register("date")}
-              />
-              <p className="text-xs text-destructive">
-                {form.formState.errors.date?.message}
-              </p>
-            </div>
+        <CardContent className="grid grid-cols-3 gap-3">
 
-            <div>
-              <label className="block text-xs mb-1">Select EDO</label>
-              <select
-                className="w-full rounded-md border px-3 py-2 text-sm bg-background"
-                {...form.register("edoId")}
-              >
-                <option value="">Choose EDO</option>
-                {edos.map((edo) => (
-                  <option key={edo.id} value={edo.id}>
-                    {edo.name}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-destructive">
-                {form.formState.errors.edoId?.message}
-              </p>
-            </div>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="border p-2 rounded" />
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="border p-2 rounded" />
 
-            <div>
-              <label className="block text-xs mb-1">Select route</label>
-              <select
-                className="w-full rounded-md border px-3 py-2 text-sm bg-background"
-                {...form.register("routeCode")}
-                disabled={!selectedEdoId}
-              >
-                <option value="">
-                  {selectedEdoId ? "Choose route" : "Select EDO first"}
-                </option>
-                {routes.map((route) => (
-                  <option key={route.id} value={route.code}>
-                    {route.code} - {route.description}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground">
-                Routes are filtered by the selected EDO.
-              </p>
-            </div>
+          <select value={edoFilter} onChange={(e) => setEdoFilter(e.target.value)} className="border p-2 rounded">
+            <option value="all">All EDOs</option>
+            {[...new Set(rows.map((r) => r.edoName))]
+              .sort((a, b) => a.localeCompare(b))
+              .map((e) => (
+                <option key={e}>{e}</option>
+              ))}
+          </select>
 
-            <div>
-              <label className="block text-xs mb-1">Type of relief</label>
-              <select
-                className="w-full rounded-md border px-3 py-2 text-sm bg-background"
-                {...form.register("reliefType")}
-              >
-                <option value="day">Day Relief</option>
-                <option value="second_delivery">Second Delivery</option>
-                <option value="sunday_ph">Sunday / Public Holiday</option>
-              </select>
-            </div>
-
-            <div>
-              <div className="text-xs mb-1 text-muted-foreground">
-                Rate for selection
-              </div>
-              <div className="text-lg font-semibold">
-                R {currentRate.toFixed(2)}
-              </div>
-              <Button type="submit" className="mt-2 w-full">
-                Submit for Approval
-              </Button>
-            </div>
-          </form>
         </CardContent>
       </Card>
 
+      {/* SUMMARY */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <SummaryCard title="Pending" rows={pending} />
+        <SummaryCard title="Pending" rows={pending} onEdit={(r) => {
+          setEditing(r);
+          setEditDate(r.date);
+          setEditType(r.reliefType);
+        }} onDelete={handleDelete} />
+
         <SummaryCard title="Approved" rows={approved} />
         <SummaryCard title="Rejected" rows={rejected} />
       </div>
+
+      {/* EDIT MODAL */}
+      {editing && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
+          <div className="bg-white p-6 rounded-lg w-80 space-y-3">
+
+            <h2 className="font-semibold">Edit Invoice</h2>
+
+            <input
+              type="date"
+              value={editDate}
+              onChange={(e) => setEditDate(e.target.value)}
+              className="w-full border p-2 rounded"
+            />
+
+            <select
+              value={editType}
+              onChange={(e) => setEditType(e.target.value as ReliefType)}
+              className="w-full border p-2 rounded"
+            >
+              <option value="day">Day Relief</option>
+              <option value="second_delivery">Second Delivery</option>
+              <option value="sunday_ph">Sunday / Public Holiday</option>
+            </select>
+
+            <div className="flex gap-2">
+              <Button onClick={handleUpdate}>Save</Button>
+              <Button variant="outline" onClick={() => setEditing(null)}>
+                Cancel
+              </Button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -322,54 +284,39 @@ export default function RelieverInvoicingPage() {
 // =============================
 // SUMMARY CARD
 // =============================
-function SummaryCard({
-  title,
-  rows,
-}: {
-  title: string;
-  rows: RelieverInvoice[];
-}) {
+function SummaryCard({ title, rows, onEdit, onDelete }: any) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
+        <CardTitle>{title}</CardTitle>
       </CardHeader>
-      <CardContent className="max-h-80 overflow-y-auto text-sm">
-        {rows.length === 0 ? (
-          <div className="text-muted-foreground">
-            No {title.toLowerCase()} items.
+      <CardContent>
+        {rows.map((r: any) => (
+          <div key={r.id} className="flex justify-between items-center border-b py-2">
+
+            <div>
+              {r.date} · {r.routeCode}
+              <div className="text-xs text-muted-foreground">
+                {r.edoName}
+              </div>
+            </div>
+
+            <div className="flex gap-2 items-center">
+              R {r.amount.toFixed(2)}
+
+              {title === "Pending" && (
+                <>
+                  <Button size="sm" onClick={() => onEdit(r)}>Edit</Button>
+                  <Button size="sm" variant="destructive" onClick={() => onDelete(r.id)}>
+                    Delete
+                  </Button>
+                </>
+              )}
+
+            </div>
           </div>
-        ) : (
-          <ul className="space-y-2">
-            {rows.map((r) => (
-              <li key={r.id} className="flex justify-between gap-2">
-                <div>
-                  <div className="font-medium">
-                    {r.date} · {r.routeCode}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {labelType(r.reliefType)} · {r.edoName}
-                  </div>
-                </div>
-                <div className="font-semibold">
-                  R {r.amount.toFixed(2)}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+        ))}
       </CardContent>
     </Card>
   );
-}
-
-function labelType(t: ReliefType): string {
-  switch (t) {
-    case "day":
-      return "Day Relief";
-    case "second_delivery":
-      return "Second Delivery";
-    case "sunday_ph":
-      return "Sunday / Public Holiday";
-  }
 }
