@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { db } from "@/lib/firebase";
-import { doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { doc, deleteDoc } from "firebase/firestore";
 
 import { getCurrentUser } from "@/lib/session";
 import NoAccess from "@/components/no-access";
@@ -53,11 +53,6 @@ export default function RelieverInvoicingPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [edoFilter, setEdoFilter] = useState("all");
-
-  // EDIT MODAL
-  const [editing, setEditing] = useState<RelieverInvoice | null>(null);
-  const [editDate, setEditDate] = useState("");
-  const [editType, setEditType] = useState<ReliefType>("day");
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -135,6 +130,7 @@ export default function RelieverInvoicingPage() {
 
   if (from) filtered = filtered.filter((r) => r.date >= from);
   if (to) filtered = filtered.filter((r) => r.date <= to);
+
   if (edoFilter !== "all") {
     filtered = filtered.filter((r) => r.edoName === edoFilter);
   }
@@ -169,27 +165,8 @@ export default function RelieverInvoicingPage() {
   }
 
   // =============================
-  // UPDATE
+  // DELETE
   // =============================
-  async function handleUpdate() {
-    if (!editing) return;
-
-    await updateDoc(doc(db, "invoices", editing.id), {
-      date: editDate,
-      reliefType: editType,
-    });
-
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === editing.id
-          ? { ...r, date: editDate, reliefType: editType }
-          : r
-      )
-    );
-
-    setEditing(null);
-  }
-
   async function handleDelete(id: string) {
     if (!confirm("Delete invoice?")) return;
 
@@ -203,6 +180,7 @@ export default function RelieverInvoicingPage() {
   return (
     <div className="space-y-6 p-4">
 
+      {/* HEADER */}
       <header className="flex justify-between items-center">
         <h1 className="text-xl font-semibold">Reliever Invoicing</h1>
         <Button asChild variant="outline">
@@ -218,9 +196,7 @@ export default function RelieverInvoicingPage() {
         <CardContent className="grid gap-3 grid-cols-1 md:grid-cols-3">
 
           <div className="flex flex-col">
-            <label className="text-xs font-medium mb-1">
-              Start Date
-            </label>
+            <label className="text-xs font-medium mb-1">Start Date</label>
             <input
               type="date"
               value={from}
@@ -230,9 +206,7 @@ export default function RelieverInvoicingPage() {
           </div>
 
           <div className="flex flex-col">
-            <label className="text-xs font-medium mb-1">
-              End Date
-            </label>
+            <label className="text-xs font-medium mb-1">End Date</label>
             <input
               type="date"
               value={to}
@@ -241,14 +215,22 @@ export default function RelieverInvoicingPage() {
             />
           </div>
 
-          <select value={edoFilter} onChange={(e) => setEdoFilter(e.target.value)} className="border p-2 rounded">
-            <option value="all">All EDOs</option>
-            {[...new Set(rows.map((r) => r.edoName))]
-              .sort((a, b) => a.localeCompare(b))
-              .map((e) => (
-                <option key={e}>{e}</option>
-              ))}
-          </select>
+          <div className="flex flex-col">
+            <label className="text-xs font-medium mb-1">EDO</label>
+            <select
+              value={edoFilter}
+              onChange={(e) => setEdoFilter(e.target.value)}
+              className="border p-2 rounded"
+            >
+              <option value="all">All EDOs</option>
+              {[...new Set(rows.map((r) => r.edoName))]
+                .filter(Boolean)
+                .sort((a, b) => a.localeCompare(b))
+                .map((e) => (
+                  <option key={e}>{e}</option>
+                ))}
+            </select>
+          </div>
 
         </CardContent>
       </Card>
@@ -264,7 +246,6 @@ export default function RelieverInvoicingPage() {
             className="grid gap-4 grid-cols-1 md:grid-cols-5"
           >
 
-            {/* DATE */}
             <div className="flex flex-col">
               <label className="text-xs font-medium mb-1">Select date</label>
               <input
@@ -275,7 +256,6 @@ export default function RelieverInvoicingPage() {
               />
             </div>
 
-            {/* EDO */}
             <div className="flex flex-col">
               <label className="text-xs font-medium mb-1">Select EDO</label>
               <select
@@ -291,7 +271,6 @@ export default function RelieverInvoicingPage() {
               </select>
             </div>
 
-            {/* ROUTE */}
             <div className="flex flex-col">
               <label className="text-xs font-medium mb-1">Select route</label>
               <select
@@ -310,7 +289,6 @@ export default function RelieverInvoicingPage() {
               </select>
             </div>
 
-            {/* TYPE */}
             <div className="flex flex-col">
               <label className="text-xs font-medium mb-1">Type of relief</label>
               <select
@@ -323,7 +301,6 @@ export default function RelieverInvoicingPage() {
               </select>
             </div>
 
-            {/* RATE */}
             <div className="flex flex-col justify-end">
               <div className="text-xs text-muted-foreground">Rate</div>
               <div className="text-lg font-semibold">
@@ -341,54 +318,10 @@ export default function RelieverInvoicingPage() {
 
       {/* SUMMARY */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <SummaryCard
-          title="Pending"
-          rows={pending}
-          onEdit={(r: any) => {
-            setEditing(r);
-            setEditDate(r.date);
-            setEditType(r.reliefType);
-          }}
-          onDelete={handleDelete}
-        />
+        <SummaryCard title="Pending" rows={pending} onDelete={handleDelete} />
         <SummaryCard title="Approved" rows={approved} />
         <SummaryCard title="Rejected" rows={rejected} />
       </div>
-
-      {/* EDIT MODAL */}
-      {editing && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
-          <div className="bg-white p-6 rounded-lg w-80 space-y-3">
-
-            <h2 className="font-semibold">Edit Invoice</h2>
-
-            <input
-              type="date"
-              value={editDate}
-              onChange={(e) => setEditDate(e.target.value)}
-              className="w-full border p-2 rounded"
-            />
-
-            <select
-              value={editType}
-              onChange={(e) => setEditType(e.target.value as ReliefType)}
-              className="w-full border p-2 rounded"
-            >
-              <option value="day">Day Relief</option>
-              <option value="second_delivery">Second Delivery</option>
-              <option value="sunday_ph">Sunday / Public Holiday</option>
-            </select>
-
-            <div className="flex gap-2">
-              <Button onClick={handleUpdate}>Save</Button>
-              <Button variant="outline" onClick={() => setEditing(null)}>
-                Cancel
-              </Button>
-            </div>
-
-          </div>
-        </div>
-      )}
 
     </div>
   );
@@ -397,7 +330,7 @@ export default function RelieverInvoicingPage() {
 // =============================
 // SUMMARY CARD
 // =============================
-function SummaryCard({ title, rows, onEdit, onDelete }: any) {
+function SummaryCard({ title, rows, onDelete }: any) {
   return (
     <Card>
       <CardHeader>
@@ -410,34 +343,37 @@ function SummaryCard({ title, rows, onEdit, onDelete }: any) {
           </div>
         ) : (
           rows.map((r: any) => (
-            <div key={r.id} className="flex justify-between items-center border-b py-2">
+            <div
+              key={r.id}
+              className="flex justify-between items-center border-b py-2"
+            >
 
               <div>
-                {r.date} · {r.routeCode}
+                <div className="font-medium">
+                  {r.date} · {r.routeCode}
+                </div>
                 <div className="text-xs text-muted-foreground">
                   {r.edoName}
                 </div>
               </div>
 
               <div className="flex gap-2 items-center">
-                R {r.amount.toFixed(2)}
+                <div className="font-semibold">
+                  R {r.amount.toFixed(2)}
+                </div>
 
                 {title === "Pending" && (
-                  <>
-                    <Button size="sm" onClick={() => onEdit(r)}>
-                      Edit
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => onDelete(r.id)}
-                    >
-                      Delete
-                    </Button>
-                  </>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => onDelete(r.id)}
+                  >
+                    Delete
+                  </Button>
                 )}
 
               </div>
+
             </div>
           ))
         )}
