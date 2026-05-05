@@ -217,8 +217,29 @@ export default function RelieverInvoicingPage() {
         </CardHeader>
         <CardContent className="grid gap-3 grid-cols-1 md:grid-cols-3">
 
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="border p-2 rounded" />
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="border p-2 rounded" />
+          <div className="flex flex-col">
+            <label className="text-xs font-medium mb-1">
+              Start Date
+            </label>
+            <input
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              className="border p-2 rounded"
+            />
+          </div>
+
+          <div className="flex flex-col">
+            <label className="text-xs font-medium mb-1">
+              End Date
+            </label>
+            <input
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className="border p-2 rounded"
+            />
+          </div>
 
           <select value={edoFilter} onChange={(e) => setEdoFilter(e.target.value)} className="border p-2 rounded">
             <option value="all">All EDOs</option>
