@@ -49,6 +49,8 @@ export default function RelieverInvoicingPage() {
   const [routes, setRoutes] = useState<any[]>([]);
   const [rows, setRows] = useState<RelieverInvoice[]>([]);
 
+  const [showSuccess, setShowSuccess] = useState(false);
+
   // FILTERS
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -145,24 +147,39 @@ export default function RelieverInvoicingPage() {
   // SUBMIT
   // =============================
   async function onSubmit(values: FormValues) {
-    const edo = edos.find((e) => e.id === values.edoId);
-    const route = routes.find((r) => r.code === values.routeCode);
+  const edo = edos.find((e) => e.id === values.edoId);
+  const route = routes.find((r) => r.code === values.routeCode);
 
-    if (!edo || !route) return;
+  if (!edo || !route) return;
 
-    const invoice = await createRelieverInvoice({
-      relieverUserId: user.uid,
-      relieverBusinessName: user.name,
-      relieverCompanyId: user.relieverId,
-      edoId: edo.id,
-      edoName: edo.name,
-      date: values.date,
-      routeCode: route.code,
-      reliefType: values.reliefType,
-    });
+  const invoice = await createRelieverInvoice({
+    relieverUserId: user.uid,
+    relieverBusinessName: user.name,
+    relieverCompanyId: user.relieverId,
+    edoId: edo.id,
+    edoName: edo.name,
+    date: values.date,
+    routeCode: route.code,
+    reliefType: values.reliefType,
+  });
 
-    setRows((prev) => [invoice, ...prev]);
-  }
+  setRows((prev) => [invoice, ...prev]);
+
+  // 🧹 CLEAR FORM (important)
+  form.reset({
+    date: "",
+    edoId: values.edoId, // keep EDO for speed
+    routeCode: "",
+    reliefType: values.reliefType,
+  });
+
+  // 🔔 SUCCESS FEEDBACK
+  setShowSuccess(true);
+  setTimeout(() => setShowSuccess(false), 2000);
+
+  // 📳 mobile feedback (optional)
+  if (navigator.vibrate) navigator.vibrate(100);
+}
 
   // =============================
   // DELETE
