@@ -48,9 +48,9 @@ export type RelieverInvoice = {
 // ==============================
 
 const RATE_MATRIX: Record<ReliefType, number> = {
-  day: 441,
-  second_delivery: 220,
-  sunday_ph: 556,
+  day: 470,
+  second_delivery: 235,
+  sunday_ph: 590,
 };
 
 export function getAllRates() {
