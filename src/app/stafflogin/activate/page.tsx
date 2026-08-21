@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -223,61 +223,107 @@ export default function EmployeeActivatePage() {
       },
     });
 
-  // =====================================================
-  // FIREBASE RECAPTCHA
-  // =====================================================
+ // =====================================================
+// FIREBASE RECAPTCHA
+// =====================================================
 
-  function getRecaptchaVerifier() {
-    if (
-      recaptchaVerifierRef.current
-    ) {
-      return (
-        recaptchaVerifierRef.current
+function clearRecaptchaVerifier() {
+  if (recaptchaVerifierRef.current) {
+    try {
+      recaptchaVerifierRef.current.clear();
+    } catch (error) {
+      console.warn(
+        'reCAPTCHA cleanup warning:',
+        error
       );
     }
 
-    const verifier =
-      new RecaptchaVerifier(
-        auth,
-        'recaptcha-container',
-        {
-          size: 'invisible',
-
-          callback: () => {
-            console.log(
-              'reCAPTCHA verification completed.'
-            );
-          },
-
-          'expired-callback':
-            () => {
-              console.log(
-                'reCAPTCHA expired.'
-              );
-            },
-        }
-      );
-
-    recaptchaVerifierRef.current =
-      verifier;
-
-    return verifier;
+    recaptchaVerifierRef.current = null;
   }
 
-  function clearRecaptchaVerifier() {
-    if (
-      recaptchaVerifierRef.current
-    ) {
+  // Firebase / reCAPTCHA may leave rendered
+  // content attached to the container after
+  // verifier.clear().
+  //
+  // Empty the container before another verifier
+  // is allowed to render into it.
+  const container =
+    document.getElementById(
+      'recaptcha-container'
+    );
+
+  if (container) {
+    container.innerHTML = '';
+  }
+}
+
+function getRecaptchaVerifier() {
+  // Reuse the current verifier for the current
+  // phone-auth attempt.
+  if (recaptchaVerifierRef.current) {
+    return recaptchaVerifierRef.current;
+  }
+
+  const container =
+    document.getElementById(
+      'recaptcha-container'
+    );
+
+  if (!container) {
+    throw new Error(
+      'The security verification container is unavailable.'
+    );
+  }
+
+  // Important after a previous failed attempt:
+  // make sure the container is completely clean
+  // before Firebase renders reCAPTCHA again.
+  container.innerHTML = '';
+
+  const verifier =
+    new RecaptchaVerifier(
+      auth,
+      container,
+      {
+        size: 'invisible',
+
+        callback: () => {
+          console.log(
+            'reCAPTCHA verification completed.'
+          );
+        },
+
+        'expired-callback': () => {
+          console.log(
+            'reCAPTCHA expired.'
+          );
+
+          clearRecaptchaVerifier();
+        },
+      }
+    );
+
+  recaptchaVerifierRef.current =
+    verifier;
+
+  return verifier;
+}
+
+// Clean Firebase reCAPTCHA up when the
+// activation page is left/unmounted.
+useEffect(() => {
+  return () => {
+    if (recaptchaVerifierRef.current) {
       try {
         recaptchaVerifierRef.current.clear();
       } catch {
-        // Ignore cleanup errors.
+        // Ignore unmount cleanup errors.
       }
 
-      recaptchaVerifierRef.current =
-        null;
+      recaptchaVerifierRef.current = null;
     }
-  }
+  };
+}, []);
 
   // =====================================================
   // STEP 1
@@ -356,16 +402,14 @@ export default function EmployeeActivatePage() {
       // FIREBASE PHONE AUTH
       // ===============================================
 
-      clearRecaptchaVerifier();
-
       const verifier =
         getRecaptchaVerifier();
 
-      const confirmationResult =
+        const confirmationResult =
         await signInWithPhoneNumber(
-          auth,
-          verifiedCellphone,
-          verifier
+            auth,
+            verifiedCellphone,
+            verifier
         );
 
       confirmationResultRef.current =
@@ -825,6 +869,7 @@ export default function EmployeeActivatePage() {
                         <Input
                           type="password"
                           inputMode="numeric"
+                          autoComplete="off"
                           maxLength={6}
                           placeholder="••••••"
                           {...field}
