@@ -7,7 +7,7 @@ import {
   Timestamp,
 } from 'firebase-admin/firestore';
 
-import { adminDb } from '@/lib/firebase-admin';
+import { getAdminDb } from '@/lib/firebase-admin';
 
 import {
   cellphoneToLocal,
@@ -60,6 +60,17 @@ export async function POST(
   request: Request
 ) {
   try {
+
+    // =================================================
+    // FIREBASE ADMIN
+    //
+    // Initialise inside the request so that any
+    // configuration error is caught by this route's
+    // try/catch instead of crashing during module load.
+    // =================================================
+
+    const adminDb =
+      getAdminDb();
 
     // =================================================
     // READ REQUEST

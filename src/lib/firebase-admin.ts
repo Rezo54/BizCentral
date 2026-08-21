@@ -9,27 +9,61 @@ import {
 
 import {
   getFirestore,
+  Firestore,
 } from 'firebase-admin/firestore';
 
 import {
   getAuth,
+  Auth,
 } from 'firebase-admin/auth';
 
 // =====================================================
 // FIREBASE ADMIN
 // SERVER SIDE ONLY
+//
+// IMPORTANT:
+//
+// Firebase Admin is initialised LAZILY.
+//
+// This prevents a bad/missing Netlify environment
+// variable from crashing an API route while the
+// module itself is being imported.
 // =====================================================
 
-function getAdminApp(): App {
+let cachedAdminApp: App | null = null;
+
+let cachedAdminDb: Firestore | null = null;
+
+let cachedAdminAuth: Auth | null = null;
+
+
+// =====================================================
+// GET ADMIN APP
+// =====================================================
+
+export function getAdminApp(): App {
 
   // ---------------------------------------------------
-  // Reuse existing Admin app
+  // Return cached app
   // ---------------------------------------------------
 
-  const existingApps = getApps();
+  if (cachedAdminApp) {
+    return cachedAdminApp;
+  }
+
+  // ---------------------------------------------------
+  // Reuse Firebase Admin app if already initialised
+  // ---------------------------------------------------
+
+  const existingApps =
+    getApps();
 
   if (existingApps.length > 0) {
-    return existingApps[0];
+
+    cachedAdminApp =
+      existingApps[0];
+
+    return cachedAdminApp;
   }
 
   // ---------------------------------------------------
@@ -37,16 +71,19 @@ function getAdminApp(): App {
   // ---------------------------------------------------
 
   const projectId =
-    process.env.FIREBASE_ADMIN_PROJECT_ID;
+    process.env
+      .FIREBASE_ADMIN_PROJECT_ID;
 
   const clientEmail =
-    process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
+    process.env
+      .FIREBASE_ADMIN_CLIENT_EMAIL;
 
   const rawPrivateKey =
-    process.env.FIREBASE_ADMIN_PRIVATE_KEY;
+    process.env
+      .FIREBASE_ADMIN_PRIVATE_KEY;
 
   // ---------------------------------------------------
-  // VALIDATE ENVIRONMENT
+  // VALIDATION
   // ---------------------------------------------------
 
   if (!projectId) {
@@ -70,11 +107,13 @@ function getAdminApp(): App {
   // ---------------------------------------------------
   // NORMALISE PRIVATE KEY
   //
-  // Supports:
-  // .env.local:
-  // -----BEGIN PRIVATE KEY-----\n...\n...
+  // Supports both:
   //
-  // and Netlify multiline environment variables.
+  // \n escaped keys
+  //
+  // and
+  //
+  // real multiline Netlify keys.
   // ---------------------------------------------------
 
   const privateKey =
@@ -84,9 +123,9 @@ function getAdminApp(): App {
       .trim();
 
   // ---------------------------------------------------
-  // BASIC PRIVATE KEY VALIDATION
+  // BASIC PEM VALIDATION
   //
-  // Never log the key itself.
+  // Never print/log the actual private key.
   // ---------------------------------------------------
 
   if (
@@ -97,18 +136,18 @@ function getAdminApp(): App {
       '-----END PRIVATE KEY-----'
     )
   ) {
+
     throw new Error(
       'FIREBASE_ADMIN_PRIVATE_KEY has invalid PEM formatting'
     );
   }
 
   // ---------------------------------------------------
-  // INITIALISE FIREBASE ADMIN
+  // INITIALISE
   // ---------------------------------------------------
 
-  try {
-
-    return initializeApp({
+  cachedAdminApp =
+    initializeApp({
       credential: cert({
         projectId,
         clientEmail,
@@ -116,41 +155,52 @@ function getAdminApp(): App {
       }),
     });
 
-  } catch (error) {
-
-    console.error(
-      'Firebase Admin initialisation failed.',
-      error
-    );
-
-    throw error;
-  }
+  return cachedAdminApp;
 }
 
-// =====================================================
-// ADMIN APP
-// =====================================================
-
-const adminApp =
-  getAdminApp();
 
 // =====================================================
-// FIRESTORE
-//
-// BizCentral uses the named Firestore database:
-//
-// biz-central
+// GET ADMIN FIRESTORE
 // =====================================================
 
-export const adminDb =
-  getFirestore(
-    adminApp,
-    'biz-central'
-  );
+export function getAdminDb(): Firestore {
+
+  if (cachedAdminDb) {
+    return cachedAdminDb;
+  }
+
+  const app =
+    getAdminApp();
+
+  // BizCentral uses named Firestore DB:
+  //
+  // biz-central
+
+  cachedAdminDb =
+    getFirestore(
+      app,
+      'biz-central'
+    );
+
+  return cachedAdminDb;
+}
+
 
 // =====================================================
-// FIREBASE AUTH
+// GET ADMIN AUTH
 // =====================================================
 
-export const adminAuth =
-  getAuth(adminApp);
+export function getAdminAuth(): Auth {
+
+  if (cachedAdminAuth) {
+    return cachedAdminAuth;
+  }
+
+  const app =
+    getAdminApp();
+
+  cachedAdminAuth =
+    getAuth(app);
+
+  return cachedAdminAuth;
+}
