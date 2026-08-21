@@ -70,7 +70,7 @@ export async function POST(
     // =================================================
 
     const adminDb =
-      getAdminDb();
+      await getAdminDb();
 
     // =================================================
     // READ REQUEST

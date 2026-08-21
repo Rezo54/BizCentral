@@ -1,17 +1,21 @@
 import { NextResponse } from 'next/server';
 
-import {
-  getAdminDb,
-} from '@/lib/firebase-admin';
-
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
 
   try {
 
+    // Dynamic import INSIDE the request.
+    const {
+      getAdminDb,
+    } = await import(
+      '@/lib/firebase-admin'
+    );
+
     const db =
-      getAdminDb();
+      await getAdminDb();
 
     const snapshot =
       await db
@@ -29,10 +33,10 @@ export async function GET() {
         !snapshot.empty,
     });
 
-  } catch (error: any) {
+  } catch (error) {
 
     console.error(
-      'Firebase Admin test failed:',
+      'Firebase Admin diagnostic failed:',
       error
     );
 
@@ -41,13 +45,10 @@ export async function GET() {
         success: false,
         code:
           'FIREBASE_ADMIN_TEST_FAILED',
-
-        // Safe diagnostic only.
-        // No credentials are returned.
         error:
           error instanceof Error
             ? error.message
-            : 'Unknown Firebase Admin error',
+            : String(error),
       },
       {
         status: 500,

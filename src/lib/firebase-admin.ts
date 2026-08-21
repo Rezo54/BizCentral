@@ -1,39 +1,20 @@
 // src/lib/firebase-admin.ts
 
-import {
-  getApps,
-  initializeApp,
-  cert,
-  App,
-} from 'firebase-admin/app';
-
-import {
-  getFirestore,
-  Firestore,
-} from 'firebase-admin/firestore';
-
-import {
-  getAuth,
-  Auth,
-} from 'firebase-admin/auth';
+import type { App } from 'firebase-admin/app';
+import type { Firestore } from 'firebase-admin/firestore';
+import type { Auth } from 'firebase-admin/auth';
 
 // =====================================================
 // FIREBASE ADMIN
 // SERVER SIDE ONLY
 //
-// IMPORTANT:
-//
-// Firebase Admin is initialised LAZILY.
-//
-// This prevents a bad/missing Netlify environment
-// variable from crashing an API route while the
-// module itself is being imported.
+// Firebase Admin packages are dynamically imported.
+// This avoids loading firebase-admin while Next/Netlify
+// is evaluating the module.
 // =====================================================
 
 let cachedAdminApp: App | null = null;
-
 let cachedAdminDb: Firestore | null = null;
-
 let cachedAdminAuth: Auth | null = null;
 
 
@@ -41,19 +22,17 @@ let cachedAdminAuth: Auth | null = null;
 // GET ADMIN APP
 // =====================================================
 
-export function getAdminApp(): App {
-
-  // ---------------------------------------------------
-  // Return cached app
-  // ---------------------------------------------------
+export async function getAdminApp(): Promise<App> {
 
   if (cachedAdminApp) {
     return cachedAdminApp;
   }
 
-  // ---------------------------------------------------
-  // Reuse Firebase Admin app if already initialised
-  // ---------------------------------------------------
+  const {
+    getApps,
+    initializeApp,
+    cert,
+  } = await import('firebase-admin/app');
 
   const existingApps =
     getApps();
@@ -71,20 +50,13 @@ export function getAdminApp(): App {
   // ---------------------------------------------------
 
   const projectId =
-    process.env
-      .FIREBASE_ADMIN_PROJECT_ID;
+    process.env.FIREBASE_ADMIN_PROJECT_ID;
 
   const clientEmail =
-    process.env
-      .FIREBASE_ADMIN_CLIENT_EMAIL;
+    process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
 
   const rawPrivateKey =
-    process.env
-      .FIREBASE_ADMIN_PRIVATE_KEY;
-
-  // ---------------------------------------------------
-  // VALIDATION
-  // ---------------------------------------------------
+    process.env.FIREBASE_ADMIN_PRIVATE_KEY;
 
   if (!projectId) {
     throw new Error(
@@ -106,14 +78,6 @@ export function getAdminApp(): App {
 
   // ---------------------------------------------------
   // NORMALISE PRIVATE KEY
-  //
-  // Supports both:
-  //
-  // \n escaped keys
-  //
-  // and
-  //
-  // real multiline Netlify keys.
   // ---------------------------------------------------
 
   const privateKey =
@@ -121,12 +85,6 @@ export function getAdminApp(): App {
       .replace(/^["']|["']$/g, '')
       .replace(/\\n/g, '\n')
       .trim();
-
-  // ---------------------------------------------------
-  // BASIC PEM VALIDATION
-  //
-  // Never print/log the actual private key.
-  // ---------------------------------------------------
 
   if (
     !privateKey.includes(
@@ -136,7 +94,6 @@ export function getAdminApp(): App {
       '-----END PRIVATE KEY-----'
     )
   ) {
-
     throw new Error(
       'FIREBASE_ADMIN_PRIVATE_KEY has invalid PEM formatting'
     );
@@ -163,22 +120,24 @@ export function getAdminApp(): App {
 // GET ADMIN FIRESTORE
 // =====================================================
 
-export function getAdminDb(): Firestore {
+export async function getAdminDb(): Promise<Firestore> {
 
   if (cachedAdminDb) {
     return cachedAdminDb;
   }
 
-  const app =
-    getAdminApp();
+  const adminApp =
+    await getAdminApp();
 
-  // BizCentral uses named Firestore DB:
-  //
-  // biz-central
+  const {
+    getFirestore,
+  } = await import(
+    'firebase-admin/firestore'
+  );
 
   cachedAdminDb =
     getFirestore(
-      app,
+      adminApp,
       'biz-central'
     );
 
@@ -190,17 +149,23 @@ export function getAdminDb(): Firestore {
 // GET ADMIN AUTH
 // =====================================================
 
-export function getAdminAuth(): Auth {
+export async function getAdminAuth(): Promise<Auth> {
 
   if (cachedAdminAuth) {
     return cachedAdminAuth;
   }
 
-  const app =
-    getAdminApp();
+  const adminApp =
+    await getAdminApp();
+
+  const {
+    getAuth,
+  } = await import(
+    'firebase-admin/auth'
+  );
 
   cachedAdminAuth =
-    getAuth(app);
+    getAuth(adminApp);
 
   return cachedAdminAuth;
 }
