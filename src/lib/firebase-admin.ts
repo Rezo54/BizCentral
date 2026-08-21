@@ -4,6 +4,7 @@ import {
   getApps,
   initializeApp,
   cert,
+  App,
 } from 'firebase-admin/app';
 
 import {
@@ -19,57 +20,137 @@ import {
 // SERVER SIDE ONLY
 // =====================================================
 
-function getAdminApp() {
+function getAdminApp(): App {
 
-  if (getApps().length) {
-    return getApps()[0];
+  // ---------------------------------------------------
+  // Reuse existing Admin app
+  // ---------------------------------------------------
+
+  const existingApps = getApps();
+
+  if (existingApps.length > 0) {
+    return existingApps[0];
   }
 
+  // ---------------------------------------------------
+  // ENVIRONMENT VARIABLES
+  // ---------------------------------------------------
+
   const projectId =
-    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    process.env.FIREBASE_ADMIN_PROJECT_ID;
 
   const clientEmail =
     process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
 
-  const privateKey =
-    process.env.FIREBASE_ADMIN_PRIVATE_KEY
-      ?.replace(/\\n/g, '\n');
+  const rawPrivateKey =
+    process.env.FIREBASE_ADMIN_PRIVATE_KEY;
+
+  // ---------------------------------------------------
+  // VALIDATE ENVIRONMENT
+  // ---------------------------------------------------
 
   if (!projectId) {
-  throw new Error(
-    'Missing FIREBASE_ADMIN_PROJECT_ID'
-  );
+    throw new Error(
+      'Missing FIREBASE_ADMIN_PROJECT_ID'
+    );
+  }
+
+  if (!clientEmail) {
+    throw new Error(
+      'Missing FIREBASE_ADMIN_CLIENT_EMAIL'
+    );
+  }
+
+  if (!rawPrivateKey) {
+    throw new Error(
+      'Missing FIREBASE_ADMIN_PRIVATE_KEY'
+    );
+  }
+
+  // ---------------------------------------------------
+  // NORMALISE PRIVATE KEY
+  //
+  // Supports:
+  // .env.local:
+  // -----BEGIN PRIVATE KEY-----\n...\n...
+  //
+  // and Netlify multiline environment variables.
+  // ---------------------------------------------------
+
+  const privateKey =
+    rawPrivateKey
+      .replace(/^["']|["']$/g, '')
+      .replace(/\\n/g, '\n')
+      .trim();
+
+  // ---------------------------------------------------
+  // BASIC PRIVATE KEY VALIDATION
+  //
+  // Never log the key itself.
+  // ---------------------------------------------------
+
+  if (
+    !privateKey.includes(
+      '-----BEGIN PRIVATE KEY-----'
+    ) ||
+    !privateKey.includes(
+      '-----END PRIVATE KEY-----'
+    )
+  ) {
+    throw new Error(
+      'FIREBASE_ADMIN_PRIVATE_KEY has invalid PEM formatting'
+    );
+  }
+
+  // ---------------------------------------------------
+  // INITIALISE FIREBASE ADMIN
+  // ---------------------------------------------------
+
+  try {
+
+    return initializeApp({
+      credential: cert({
+        projectId,
+        clientEmail,
+        privateKey,
+      }),
+    });
+
+  } catch (error) {
+
+    console.error(
+      'Firebase Admin initialisation failed.',
+      error
+    );
+
+    throw error;
+  }
 }
 
-if (!clientEmail) {
-  throw new Error(
-    'Missing FIREBASE_ADMIN_CLIENT_EMAIL'
-  );
-}
+// =====================================================
+// ADMIN APP
+// =====================================================
 
-if (!privateKey) {
-  throw new Error(
-    'Missing FIREBASE_ADMIN_PRIVATE_KEY'
-  );
-}
+const adminApp =
+  getAdminApp();
 
-  return initializeApp({
-    credential: cert({
-      projectId,
-      clientEmail,
-      privateKey,
-    }),
-  });
-}
-
-const adminApp = getAdminApp();
-
-// IMPORTANT:
-// BizCentral uses named Firestore database
-// "biz-central"
+// =====================================================
+// FIRESTORE
+//
+// BizCentral uses the named Firestore database:
+//
+// biz-central
+// =====================================================
 
 export const adminDb =
-  getFirestore(adminApp, 'biz-central');
+  getFirestore(
+    adminApp,
+    'biz-central'
+  );
+
+// =====================================================
+// FIREBASE AUTH
+// =====================================================
 
 export const adminAuth =
   getAuth(adminApp);
