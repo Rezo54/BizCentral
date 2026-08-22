@@ -22,7 +22,7 @@
     throw new Error("A valid Sage Company ID and Cycle ID are required.");
   }
 
-  const includeIdNumbers = confirm(
+  if (!authorization) {\n    throw new Error("The Sage Authorization header value is required.");\n  }\n\n  const includeIdNumbers = confirm(
     "Include full employee ID numbers in the integrity CSV?\n\n" +
     "Select Cancel to mask them. Banking details are always excluded."
   );
