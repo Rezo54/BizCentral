@@ -1,3 +1,5 @@
+// src/app/stafflogin/activate/page.tsx
+
 'use client';
 
 import Link from 'next/link';
@@ -788,84 +790,160 @@ export default function EmployeeActivatePage() {
 
   async function handleCreatePin(
     values: PinValues
-  ) {
+    ) {
     setIsLoading(true);
 
     try {
-      if (
-        !verifiedAuthUid
-      ) {
+        // =================================================
+        // CONFIRM FIREBASE AUTHENTICATION
+        // =================================================
+
+        const firebaseUser =
+        auth.currentUser;
+
+        if (!firebaseUser) {
         throw new Error(
-          'Your verified authentication session is missing. Please restart account activation.'
+            'Your verified authentication session is missing. Please restart account activation.'
         );
-      }
+        }
 
-      if (
-        values.pin !==
-        values.confirmPin
-      ) {
+        if (
+        !verifiedAuthUid ||
+        firebaseUser.uid !== verifiedAuthUid
+        ) {
         throw new Error(
-          'PINs do not match.'
+            'Your authentication session could not be verified. Please restart account activation.'
         );
-      }
+        }
 
-      // =================================================
-      // NEXT SECURITY PHASE
-      //
-      // Send the PIN to a secure server endpoint that:
-      //
-      // 1. Validates the Firebase ID token.
-      // 2. Identifies the authenticated employee.
-      // 3. Securely hashes the PIN.
-      // 4. Stores ONLY the PIN hash.
-      // 5. Links the Firebase UID.
-      // 6. Sets portalActivated = true.
-      //
-      // NEVER store values.pin directly in Firestore.
-      // =================================================
+        // =================================================
+        // GET FRESH FIREBASE ID TOKEN
+        //
+        // The server will independently verify this token.
+        // We do not send or trust a UID/cellphone supplied
+        // directly by the browser.
+        // =================================================
 
-      pinForm.reset({
+        const idToken =
+        await firebaseUser.getIdToken(
+            true
+        );
+
+        // =================================================
+        // COMPLETE ACTIVATION SERVER-SIDE
+        //
+        // The server will:
+        // - verify the Firebase token
+        // - obtain verified UID + phone
+        // - locate the employeePortal record
+        // - bcrypt hash the PIN
+        // - link authUid
+        // - set portalActivated = true
+        // =================================================
+
+        const response =
+        await fetch(
+            '/api/staff/activation/complete',
+            {
+            method: 'POST',
+
+            headers: {
+                'Content-Type':
+                'application/json',
+            },
+
+            body: JSON.stringify({
+                idToken,
+                pin: values.pin,
+            }),
+            }
+        );
+
+        const result =
+        await readApiResponse(
+            response
+        );
+
+        if (!response.ok) {
+        throw new Error(
+            result.message ||
+            'Unable to activate your Employee Portal account.'
+        );
+        }
+
+        if (
+        result.success !== true
+        ) {
+        throw new Error(
+            result.message ||
+            'Unable to activate your Employee Portal account.'
+        );
+        }
+
+        // =================================================
+        // SUCCESS
+        //
+        // Only show completion AFTER the server confirms
+        // that the employeePortal record was updated.
+        // =================================================
+
+        pinForm.reset({
         pin: '',
         confirmPin: '',
-      });
+        });
 
-      setShowPin(false);
-      setShowConfirmPin(
-        false
-      );
+        setShowPin(false);
+        setShowConfirmPin(false);
 
-      setStep(
-        'complete'
-      );
+        setStep('complete');
 
-      toast({
+        toast({
         title:
-          'Verification Complete',
+            'Account Activated',
 
         description:
-          'Your cellphone has been verified successfully.',
-      });
+            'Your Employee Portal account has been activated successfully.',
+        });
     } catch (error: unknown) {
-      const activationError =
+        const activationError =
         error as {
-          message?: string;
+            code?: string;
+            message?: string;
         };
 
-      toast({
-        variant:
-          'destructive',
+        let message =
+        activationError.message ||
+        'Unable to complete Employee Portal activation.';
+
+        if (
+        activationError.code ===
+        'auth/network-request-failed'
+        ) {
+        message =
+            'A network error occurred. Check your connection and try again.';
+        }
+
+        if (
+        activationError.code ===
+        'auth/user-token-expired'
+        ) {
+        message =
+            'Your verification session has expired. Please restart account activation.';
+        }
+
+        toast({
+        variant: 'destructive',
 
         title:
-          'Activation Failed',
+            'Activation Failed',
 
         description:
-          activationError.message ||
-          'Unable to continue Employee Portal activation.',
-      });
+            message,
+        });
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
-  }
+    }
 
   // =====================================================
   // UI
@@ -1386,8 +1464,8 @@ export default function EmployeeActivatePage() {
                   }
                 >
                   {isLoading
-                    ? 'Checking...'
-                    : 'Continue'}
+                    ? 'Activating...'
+                    : 'Activate Account'}
                 </Button>
 
               </form>
@@ -1411,12 +1489,12 @@ export default function EmployeeActivatePage() {
               <div>
 
                 <h2 className="text-xl font-semibold">
-                  Cellphone Verified
+                  Account Activated
                 </h2>
 
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Your cellphone verification was
-                  completed successfully.
+                Your Employee Portal account has been
+                activated successfully.
                 </p>
 
               </div>
