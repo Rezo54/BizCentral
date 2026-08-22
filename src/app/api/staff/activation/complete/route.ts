@@ -151,6 +151,11 @@ export async function POST(
     const cellphoneNormalized =
       normalizePhone(tokenPhone);
 
+      console.log('ACTIVATION PHONE CHECK', {
+        tokenPhone,
+        cellphoneNormalized,
+        });
+
     if (
       !/^27\d{9}$/.test(
         cellphoneNormalized
@@ -187,6 +192,11 @@ export async function POST(
         )
         .limit(2)
         .get();
+
+    console.log('ACTIVATION PORTAL QUERY', {
+        cellphoneNormalized,
+        matches: portalQuery.size,
+        });
 
     if (portalQuery.empty) {
       return NextResponse.json(
