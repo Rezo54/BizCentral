@@ -17,12 +17,26 @@
 
   const companyId = cleanId(prompt("Paste the Sage X-CompanyId value:"));
   const cycleId = cleanId(prompt("Paste the Sage X-CycleId value:"));
+  const authorizationInput = (prompt(
+    "Paste the complete Sage Authorization request-header value.\n\n" +
+    "It is used only in this browser tab and is never saved or downloaded."
+  ) || "").trim();
+  const authorization = /^Bearer\s+/i.test(authorizationInput)
+    ? authorizationInput
+    : authorizationInput
+      ? `Bearer ${authorizationInput}`
+      : "";
+
 
   if (!isGuid(companyId) || !isGuid(cycleId)) {
     throw new Error("A valid Sage Company ID and Cycle ID are required.");
   }
 
-  if (!authorization) {\n    throw new Error("The Sage Authorization header value is required.");\n  }\n\n  const includeIdNumbers = confirm(
+  if (!authorization) {
+    throw new Error("The Sage Authorization header value is required.");
+  }
+
+  const includeIdNumbers = confirm(
     "Include full employee ID numbers in the integrity CSV?\n\n" +
     "Select Cancel to mask them. Banking details are always excluded."
   );
@@ -31,6 +45,7 @@
     Accept: "application/json, text/plain, */*",
     "X-CompanyId": companyId,
     "X-CycleId": cycleId,
+    Authorization: authorization,
   };
 
   async function getJson(path) {
