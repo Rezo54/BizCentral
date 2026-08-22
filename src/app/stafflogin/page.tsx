@@ -1,6 +1,9 @@
+// src/app/stafflogin/page.tsx
+
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
@@ -10,12 +13,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
+    Form,
+    FormControl,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage,
 } from '@/components/ui/form';
 
 import { useToast } from '@/hooks/use-toast';
@@ -25,20 +28,20 @@ import { useToast } from '@/hooks/use-toast';
 // =====================================================
 
 const formSchema = z.object({
-  cellphone: z
-    .string()
-    .min(10, {
-      message: 'Enter a valid cellphone number.',
-    })
-    .max(15, {
-      message: 'Enter a valid cellphone number.',
-    }),
+    cellphone: z
+        .string()
+        .min(10, {
+            message: 'Enter a valid cellphone number.',
+        })
+        .max(15, {
+            message: 'Enter a valid cellphone number.',
+        }),
 
-  pin: z
-    .string()
-    .regex(/^\d{6}$/, {
-      message: 'PIN must be exactly 6 digits.',
-    }),
+    pin: z
+        .string()
+        .regex(/^\d{6}$/, {
+            message: 'PIN must be exactly 6 digits.',
+        }),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -48,270 +51,338 @@ type FormValues = z.infer<typeof formSchema>;
 // =====================================================
 
 export default function EmployeeLoginPage() {
-  const { toast } = useToast();
+    const { toast } = useToast();
+    const router = useRouter();
 
-  const [isLoading, setIsLoading] = useState(false);
-  const [showPin, setShowPin] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [showPin, setShowPin] = useState(false);
 
-  const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+    const form = useForm<FormValues>({
+        resolver: zodResolver(formSchema),
 
-    defaultValues: {
-      cellphone: '',
-      pin: '',
-    },
-  });
+        defaultValues: {
+            cellphone: '',
+            pin: '',
+        },
+    });
 
-  // =====================================================
-  // EMPLOYEE LOGIN
-  // =====================================================
+    // =====================================================
+    // EMPLOYEE LOGIN
+    // =====================================================
 
-  async function onSubmit(values: FormValues) {
-    setIsLoading(true);
+    async function onSubmit(
+        values: FormValues
+    ) {
+        setIsLoading(true);
 
-    try {
-      /*
-        Employee authentication will be connected
-        after the activation flow has been created.
+        try {
 
-        IMPORTANT:
-        The employee PIN must never be stored as
-        plain text in Firestore.
-      */
+            // =================================================
+            // EMPLOYEE LOGIN
+            // =================================================
 
-      console.log('Employee login attempt:', {
-        cellphone: values.cellphone,
-      });
+            const response =
+                await fetch(
+                    '/api/staff/login',
+                    {
+                        method: 'POST',
 
-      toast({
-        title: 'Employee Login',
-        description:
-          'Employee authentication will be enabled after account activation is configured.',
-      });
+                        headers: {
+                            'Content-Type':
+                                'application/json',
+                        },
 
-    } catch (error: any) {
+                        credentials:
+                            'include',
 
-      console.error(
-        'Employee login error:',
-        error
-      );
+                        body:
+                            JSON.stringify({
+                                cellphone:
+                                    values.cellphone,
 
-      toast({
-        variant: 'destructive',
-        title: 'Login Failed',
-        description:
-          error?.message ||
-          'Unable to log in. Please try again.',
-      });
+                                pin:
+                                    values.pin,
+                            }),
+                    }
+                );
 
-    } finally {
-      setIsLoading(false);
+            const data =
+                await response.json();
+
+            // =================================================
+            // LOGIN FAILED
+            // =================================================
+
+            if (
+                !response.ok ||
+                data?.success !== true
+            ) {
+                throw new Error(
+                    data?.message ||
+                    'Invalid cellphone number or PIN.'
+                );
+            }
+
+            // =================================================
+            // LOGIN SUCCESS
+            //
+            // The server has already created the secure
+            // HttpOnly employee session cookie.
+            // =================================================
+
+            toast({
+                title:
+                    'Login Successful',
+
+                description:
+                    'Welcome to the Employee Portal.',
+            });
+
+            // Remove PIN from the form state before leaving.
+
+            form.reset({
+                cellphone:
+                    values.cellphone,
+
+                pin: '',
+            });
+
+            // =================================================
+            // EMPLOYEE PORTAL
+            // =================================================
+
+            router.replace(
+                '/staffportal'
+            );
+
+            router.refresh();
+
+        } catch (error: unknown) {
+
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : 'Unable to log in. Please try again.';
+
+            toast({
+                variant:
+                    'destructive',
+
+                title:
+                    'Login Failed',
+
+                description:
+                    message,
+            });
+
+        } finally {
+            setIsLoading(false);
+        }
     }
-  }
 
-  // =====================================================
-  // UI
-  // =====================================================
+    // =====================================================
+    // UI
+    // =====================================================
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4">
+    return (
+        <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4">
 
-      <div className="w-full max-w-md">
+            <div className="w-full max-w-md">
 
-        <div className="rounded-xl border bg-background p-6 shadow-sm">
+                <div className="rounded-xl border bg-background p-6 shadow-sm">
 
-          {/* =============================================
+                    {/* =============================================
               HEADER
           ============================================= */}
 
-          <div className="mb-6 text-center">
+                    <div className="mb-6 text-center">
 
-            <h1 className="text-2xl font-bold">
-              Employee Portal
-            </h1>
+                        <h1 className="text-2xl font-bold">
+                            Employee Portal
+                        </h1>
 
-            <p className="mt-2 text-sm text-muted-foreground">
-              Login using your cellphone number and PIN
-            </p>
-
-          </div>
-
-          {/* =============================================
-              LOGIN FORM
-          ============================================= */}
-
-          <Form {...form}>
-
-            <form
-              onSubmit={form.handleSubmit(onSubmit)}
-              className="space-y-5"
-            >
-
-              {/* =========================================
-                  CELLPHONE
-              ========================================= */}
-
-              <FormField
-                control={form.control}
-                name="cellphone"
-                render={({ field }) => (
-
-                  <FormItem>
-
-                    <FormLabel>
-                      Cellphone Number
-                    </FormLabel>
-
-                    <FormControl>
-
-                      <Input
-                        type="tel"
-                        inputMode="tel"
-                        autoComplete="tel"
-                        placeholder="082 123 4567"
-                        {...field}
-                      />
-
-                    </FormControl>
-
-                    <FormMessage />
-
-                  </FormItem>
-
-                )}
-              />
-
-              {/* =========================================
-                  PIN
-              ========================================= */}
-
-              <FormField
-                control={form.control}
-                name="pin"
-                render={({ field }) => (
-
-                  <FormItem>
-
-                    <div className="flex items-center">
-
-                      <FormLabel>
-                        6-digit PIN
-                      </FormLabel>
-
-                      <Link
-                        href="/people/employee/reset-pin"
-                        className="ml-auto text-sm text-blue-600 hover:underline"
-                      >
-                        Forgot PIN?
-                      </Link>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                            Login using your cellphone number and PIN
+                        </p>
 
                     </div>
 
-                    <FormControl>
+                    {/* =============================================
+              LOGIN FORM
+          ============================================= */}
 
-                      <div className="relative">
+                    <Form {...form}>
 
-                        <Input
-                          type={
-                            showPin
-                              ? 'text'
-                              : 'password'
-                          }
-                          inputMode="numeric"
-                          autoComplete="current-password"
-                          maxLength={6}
-                          placeholder="••••••"
-                          {...field}
-                          onChange={(event) => {
-
-                            const value =
-                              event.target.value.replace(
-                                /\D/g,
-                                ''
-                              );
-
-                            field.onChange(value);
-
-                          }}
-                        />
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setShowPin(!showPin)
-                          }
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
+                        <form
+                            onSubmit={form.handleSubmit(onSubmit)}
+                            className="space-y-5"
                         >
-                          {showPin
-                            ? 'Hide'
-                            : 'Show'}
-                        </button>
 
-                      </div>
+                            {/* =========================================
+                  CELLPHONE
+              ========================================= */}
 
-                    </FormControl>
+                            <FormField
+                                control={form.control}
+                                name="cellphone"
+                                render={({ field }) => (
 
-                    <FormMessage />
+                                    <FormItem>
 
-                  </FormItem>
+                                        <FormLabel>
+                                            Cellphone Number
+                                        </FormLabel>
 
-                )}
-              />
+                                        <FormControl>
 
-              {/* =========================================
+                                            <Input
+                                                type="tel"
+                                                inputMode="tel"
+                                                autoComplete="tel"
+                                                placeholder="082 123 4567"
+                                                {...field}
+                                            />
+
+                                        </FormControl>
+
+                                        <FormMessage />
+
+                                    </FormItem>
+
+                                )}
+                            />
+
+                            {/* =========================================
+                  PIN
+              ========================================= */}
+
+                            <FormField
+                                control={form.control}
+                                name="pin"
+                                render={({ field }) => (
+
+                                    <FormItem>
+
+                                        <div className="flex items-center">
+
+                                            <FormLabel>
+                                                6-digit PIN
+                                            </FormLabel>
+
+                                            <Link
+                                                href="/people/employee/reset-pin"
+                                                className="ml-auto text-sm text-blue-600 hover:underline"
+                                            >
+                                                Forgot PIN?
+                                            </Link>
+
+                                        </div>
+
+                                        <FormControl>
+
+                                            <div className="relative">
+
+                                                <Input
+                                                    type={
+                                                        showPin
+                                                            ? 'text'
+                                                            : 'password'
+                                                    }
+                                                    inputMode="numeric"
+                                                    autoComplete="current-password"
+                                                    maxLength={6}
+                                                    placeholder="••••••"
+                                                    {...field}
+                                                    onChange={(event) => {
+
+                                                        const value =
+                                                            event.target.value.replace(
+                                                                /\D/g,
+                                                                ''
+                                                            );
+
+                                                        field.onChange(value);
+
+                                                    }}
+                                                />
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setShowPin(!showPin)
+                                                    }
+                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
+                                                >
+                                                    {showPin
+                                                        ? 'Hide'
+                                                        : 'Show'}
+                                                </button>
+
+                                            </div>
+
+                                        </FormControl>
+
+                                        <FormMessage />
+
+                                    </FormItem>
+
+                                )}
+                            />
+
+                            {/* =========================================
                   LOGIN BUTTON
               ========================================= */}
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={isLoading}
-              >
-                {isLoading
-                  ? 'Logging in...'
-                  : 'Login'}
-              </Button>
+                            <Button
+                                type="submit"
+                                className="w-full"
+                                disabled={isLoading}
+                            >
+                                {isLoading
+                                    ? 'Logging in...'
+                                    : 'Login'}
+                            </Button>
 
-            </form>
+                        </form>
 
-          </Form>
+                    </Form>
 
-          {/* =============================================
+                    {/* =============================================
               ACCOUNT ACTIVATION
           ============================================= */}
 
-          <div className="mt-6 border-t pt-5 text-center">
-            <p className="text-sm text-muted-foreground">
-                First time using the Employee Portal?
-            </p>
+                    <div className="mt-6 border-t pt-5 text-center">
+                        <p className="text-sm text-muted-foreground">
+                            First time using the Employee Portal?
+                        </p>
 
-            <Link
-                href="/stafflogin/activate"
-                className="mt-2 inline-block text-sm font-medium text-blue-600 hover:underline"
-            >
-                Activate your account →
-            </Link>
-            </div>
+                        <Link
+                            href="/stafflogin/activate"
+                            className="mt-2 inline-block text-sm font-medium text-blue-600 hover:underline"
+                        >
+                            Activate your account →
+                        </Link>
+                    </div>
 
-        </div>
+                </div>
 
-        {/* ===============================================
+                {/* ===============================================
             BACK TO MAIN LOGIN
         =============================================== */}
 
-        <div className="mt-5 text-center">
+                <div className="mt-5 text-center">
 
-          <Link
-            href="/"
-            className="text-sm text-muted-foreground hover:text-foreground hover:underline"
-          >
-            ← Back to BizCentral Login
-          </Link>
+                    <Link
+                        href="/"
+                        className="text-sm text-muted-foreground hover:text-foreground hover:underline"
+                    >
+                        ← Back to BizCentral Login
+                    </Link>
+
+                </div>
+
+            </div>
 
         </div>
-
-      </div>
-
-    </div>
-  );
+    );
 }
