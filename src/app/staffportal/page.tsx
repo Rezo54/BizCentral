@@ -40,6 +40,23 @@ type EmployeeSession = {
     edoId: string;
 };
 
+type AttendanceStatus =
+    | 'present'
+    | 'absent'
+    | 'off'
+    | 'leave';
+
+type TodayAttendance = {
+    date: string;
+    status: AttendanceStatus;
+    workWeek: '5_day' | '6_day';
+    scheduled: boolean;
+    source: string;
+    reason: string;
+    notes: string;
+    leaveType: string;
+};
+
 // =====================================================
 // SERVICE CARD
 // =====================================================
@@ -163,22 +180,34 @@ export default function StaffPortalPage() {
             null
         );
 
+    const [
+        attendance,
+        setAttendance,
+    ] =
+        useState<TodayAttendance | null>(
+            null
+        );
+
     const [isLoading, setIsLoading] =
         useState(true);
 
     // =================================================
-    // LOAD AUTHENTICATED EMPLOYEE
+    // LOAD AUTHENTICATED EMPLOYEE + TODAY ATTENDANCE
     // =================================================
 
     useEffect(() => {
 
         let active = true;
 
-        async function loadSession() {
+        async function loadPortal() {
 
             try {
 
-                const response =
+                // -----------------------------------------
+                // SESSION
+                // -----------------------------------------
+
+                const sessionResponse =
                     await fetch(
                         '/api/staff/session',
                         {
@@ -188,13 +217,13 @@ export default function StaffPortalPage() {
                         }
                     );
 
-                const data =
-                    await response.json();
+                const sessionData =
+                    await sessionResponse.json();
 
                 if (
-                    !response.ok ||
-                    data?.authenticated !== true ||
-                    !data?.employee
+                    !sessionResponse.ok ||
+                    sessionData?.authenticated !== true ||
+                    !sessionData?.employee
                 ) {
 
                     router.replace(
@@ -206,11 +235,61 @@ export default function StaffPortalPage() {
 
                 if (active) {
                     setEmployee(
-                        data.employee
+                        sessionData.employee
                     );
                 }
 
-            } catch {
+                // -----------------------------------------
+                // TODAY ATTENDANCE
+                // -----------------------------------------
+
+                const attendanceResponse =
+                    await fetch(
+                        '/api/staff/attendance/today',
+                        {
+                            method: 'GET',
+                            credentials: 'include',
+                            cache: 'no-store',
+                        }
+                    );
+
+                const attendanceData =
+                    await attendanceResponse.json();
+
+                if (
+                    attendanceResponse.status ===
+                    401
+                ) {
+
+                    router.replace(
+                        '/stafflogin'
+                    );
+
+                    return;
+                }
+
+                if (
+                    attendanceResponse.ok &&
+                    attendanceData?.success ===
+                    true &&
+                    attendanceData?.attendance
+                ) {
+
+                    if (active) {
+                        setAttendance(
+                            attendanceData.attendance
+                        );
+                    }
+                }
+
+            } catch (
+            error: unknown
+            ) {
+
+                console.error(
+                    'Employee Portal load failed:',
+                    error
+                );
 
                 router.replace(
                     '/stafflogin'
@@ -224,7 +303,7 @@ export default function StaffPortalPage() {
             }
         }
 
-        loadSession();
+        loadPortal();
 
         return () => {
             active = false;
@@ -259,31 +338,14 @@ export default function StaffPortalPage() {
     }
 
     // =================================================
-    // DATE
-    // =================================================
-
-    const today =
-        new Intl.DateTimeFormat(
-            'en-ZA',
-            {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-            }
-        ).format(new Date());
-
-    // =================================================
     // SESSION LOADING
-    //
-    // Do not render employee information until the
-    // authenticated session has been confirmed.
     // =================================================
 
     if (
         isLoading ||
         !employee
     ) {
+
         return (
             <div className="flex min-h-screen items-center justify-center bg-muted/30">
 
@@ -319,6 +381,115 @@ export default function StaffPortalPage() {
         ]
             .filter(Boolean)
             .join(' ');
+
+    // =================================================
+    // ATTENDANCE DISPLAY
+    // =================================================
+
+    const attendanceStatus:
+        AttendanceStatus =
+        attendance?.status ??
+        'off';
+
+    const attendanceLabel =
+        attendanceStatus ===
+            'present'
+            ? 'Present'
+            : attendanceStatus ===
+                'absent'
+                ? 'Absent'
+                : attendanceStatus ===
+                    'leave'
+                    ? 'Leave'
+                    : 'Off';
+
+    const attendanceDotClass =
+        attendanceStatus ===
+            'present'
+            ? 'bg-green-500'
+            : attendanceStatus ===
+                'absent'
+                ? 'bg-red-500'
+                : attendanceStatus ===
+                    'leave'
+                    ? 'bg-amber-500'
+                    : 'bg-slate-400';
+
+    const attendancePulseClass =
+        attendanceStatus ===
+            'present'
+            ? 'bg-green-500'
+            : attendanceStatus ===
+                'absent'
+                ? 'bg-red-500'
+                : attendanceStatus ===
+                    'leave'
+                    ? 'bg-amber-500'
+                    : 'bg-slate-400';
+
+    // =================================================
+    // TODAY DISPLAY DATE
+    //
+    // Prefer the date returned by the attendance API.
+    // This keeps the displayed date aligned with the
+    // South African date used by the attendance resolver.
+    // =================================================
+
+    const todayDate =
+        attendance?.date
+            ? new Date(
+                `${attendance.date}T12:00:00+02:00`
+            )
+            : new Date();
+
+    const today =
+        new Intl.DateTimeFormat(
+            'en-ZA',
+            {
+                timeZone:
+                    'Africa/Johannesburg',
+
+                weekday:
+                    'long',
+
+                day:
+                    'numeric',
+
+                month:
+                    'long',
+
+                year:
+                    'numeric',
+            }
+        ).format(
+            todayDate
+        );
+
+    // =================================================
+    // ATTENDANCE MESSAGE
+    // =================================================
+
+    const attendanceMessage =
+        attendanceStatus ===
+            'off'
+            ? 'You are not scheduled to work today.'
+            : attendanceStatus ===
+                'leave'
+                ? attendance?.leaveType
+                    ? `Approved ${attendance.leaveType}.`
+                    : 'You are on approved leave today.'
+                : attendanceStatus ===
+                    'absent'
+                    ? attendance?.reason
+                        ? `Recorded absent: ${attendance.reason}.`
+                        : 'You have been recorded absent today.'
+                    : attendance?.source ===
+                        'saturday_work'
+                        ? 'You have been marked present for Saturday work.'
+                        : attendance?.source ===
+                            'sunday_work'
+                            ? 'You have been marked present for Sunday work.'
+                            : 'Attendance is managed by your employer.';
 
     // =================================================
     // UI
@@ -400,6 +571,7 @@ export default function StaffPortalPage() {
                         <span className="hidden sm:inline">
                             Sign Out
                         </span>
+
                     </Button>
 
                 </div>
@@ -478,14 +650,24 @@ export default function StaffPortalPage() {
 
                                     <span className="relative flex h-3 w-3">
 
-                                        <span className="absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-20" />
+                                        <span
+                                            className={[
+                                                'absolute inline-flex h-full w-full rounded-full opacity-20',
+                                                attendancePulseClass,
+                                            ].join(' ')}
+                                        />
 
-                                        <span className="relative inline-flex h-3 w-3 rounded-full bg-green-500" />
+                                        <span
+                                            className={[
+                                                'relative inline-flex h-3 w-3 rounded-full',
+                                                attendanceDotClass,
+                                            ].join(' ')}
+                                        />
 
                                     </span>
 
                                     <span className="text-lg font-semibold">
-                                        Present
+                                        {attendanceLabel}
                                     </span>
 
                                 </div>
@@ -505,7 +687,7 @@ export default function StaffPortalPage() {
                         <div className="mt-4 border-t pt-3">
 
                             <p className="text-xs leading-5 text-muted-foreground">
-                                Attendance is managed by your employer.
+                                {attendanceMessage}
                             </p>
 
                         </div>
@@ -635,9 +817,6 @@ export default function StaffPortalPage() {
 
             {/* =============================================
                 MOBILE BOTTOM NAVIGATION
-
-                Other destinations remain disabled until
-                their protected staff routes are built.
             ============================================= */}
 
             <nav
