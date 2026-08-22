@@ -34,13 +34,24 @@ export async function getAdminApp(): Promise<App> {
     cert,
   } = await import('firebase-admin/app');
 
-  const existingApps =
-    getApps();
+  // ---------------------------------------------------
+  // USE A DEDICATED ADMIN APP
+  //
+  // Do not reuse an Admin app that may have been
+  // initialised elsewhere by Genkit or another service.
+  // ---------------------------------------------------
 
-  if (existingApps.length > 0) {
+  const APP_NAME =
+    'bizcentral-admin';
 
+  const existingApp =
+    getApps().find(
+      (app) => app.name === APP_NAME
+    );
+
+  if (existingApp) {
     cachedAdminApp =
-      existingApps[0];
+      existingApp;
 
     return cachedAdminApp;
   }
@@ -100,17 +111,21 @@ export async function getAdminApp(): Promise<App> {
   }
 
   // ---------------------------------------------------
-  // INITIALISE
+  // INITIALISE DEDICATED BIZCENTRAL ADMIN APP
   // ---------------------------------------------------
 
   cachedAdminApp =
-    initializeApp({
-      credential: cert({
+    initializeApp(
+      {
+        credential: cert({
+          projectId,
+          clientEmail,
+          privateKey,
+        }),
         projectId,
-        clientEmail,
-        privateKey,
-      }),
-    });
+      },
+      APP_NAME
+    );
 
   return cachedAdminApp;
 }
