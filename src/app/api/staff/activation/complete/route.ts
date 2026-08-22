@@ -149,12 +149,7 @@ export async function POST(
     }
 
     const cellphoneNormalized =
-      normalizePhone(tokenPhone);
-
-      console.log('ACTIVATION PHONE CHECK', {
-        tokenPhone,
-        cellphoneNormalized,
-        });
+      normalizePhone(tokenPhone);      
 
     if (
       !/^27\d{9}$/.test(
@@ -183,33 +178,7 @@ export async function POST(
     // TEMP DIAGNOSTIC:
     // Confirm which employeePortal records the Admin SDK
     // can actually see in the selected Firestore database.
-
-    const portalDiagnostic =
-        await adminDb
-        .collection('employeePortalAccess')
-        .limit(5)
-        .get();
-
-    console.log(
-    'ACTIVATION DATABASE CHECK',
-    {
-        adminProjectId:
-        process.env.FIREBASE_ADMIN_PROJECT_ID,
-
-        publicProjectId:
-        process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-
-        adminClientEmail:
-        process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
-
-        databaseId:
-        adminDb.databaseId,
-
-        portalCount:
-        portalDiagnostic.size,
-    }
-    );
-
+     
     const portalQuery =
       await adminDb
         .collection('employeePortalAccess')
@@ -221,11 +190,6 @@ export async function POST(
         )
         .limit(2)
         .get();
-
-    console.log('ACTIVATION PORTAL QUERY', {
-        cellphoneNormalized,
-        matches: portalQuery.size,
-        });
 
     if (portalQuery.empty) {
       return NextResponse.json(
