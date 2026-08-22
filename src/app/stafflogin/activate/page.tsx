@@ -1,10 +1,21 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
+
 import { z } from 'zod';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+
+import {
+  useForm,
+} from 'react-hook-form';
+
+import {
+  zodResolver,
+} from '@hookform/resolvers/zod';
 
 import {
   ConfirmationResult,
@@ -14,8 +25,13 @@ import {
 
 import { auth } from '@/lib/firebase';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import {
+  Button,
+} from '@/components/ui/button';
+
+import {
+  Input,
+} from '@/components/ui/input';
 
 import {
   Form,
@@ -26,7 +42,9 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 
-import { useToast } from '@/hooks/use-toast';
+import {
+  useToast,
+} from '@/hooks/use-toast';
 
 // =====================================================
 // TYPES
@@ -38,6 +56,14 @@ type ActivationStep =
   | 'create-pin'
   | 'complete';
 
+type ApiResult = {
+  success?: boolean;
+  code?: string;
+  message?: string;
+  cellphone?: string;
+  employeeId?: string;
+};
+
 // =====================================================
 // SOUTH AFRICAN CELLPHONE NORMALISATION
 // =====================================================
@@ -47,14 +73,19 @@ function cleanCellphone(value: string) {
 }
 
 function displayCellphone(value: string) {
-  const cleaned = cleanCellphone(value);
+  const cleaned =
+    cleanCellphone(value);
 
-  // Local SA format
+  // Local SA format:
+  // 0821234567
   if (
     cleaned.length === 10 &&
     cleaned.startsWith('0')
   ) {
-    return `${cleaned.slice(0, 3)} ${cleaned.slice(
+    return `${cleaned.slice(
+      0,
+      3
+    )} ${cleaned.slice(
       3,
       6
     )} ${cleaned.slice(6)}`;
@@ -66,7 +97,10 @@ function displayCellphone(value: string) {
     cleaned.length === 11 &&
     cleaned.startsWith('27')
   ) {
-    return `0${cleaned.slice(2, 4)} ${cleaned.slice(
+    return `0${cleaned.slice(
+      2,
+      4
+    )} ${cleaned.slice(
       4,
       7
     )} ${cleaned.slice(7)}`;
@@ -76,116 +110,189 @@ function displayCellphone(value: string) {
 }
 
 // =====================================================
+// SAFE API RESPONSE PARSING
+//
+// Netlify / Next.js may occasionally return a
+// non-JSON error response before our route handler
+// has an opportunity to generate its own JSON.
+// =====================================================
+
+async function readApiResponse(
+  response: Response
+): Promise<ApiResult> {
+  const contentType =
+    response.headers.get(
+      'content-type'
+    ) || '';
+
+  if (
+    contentType.includes(
+      'application/json'
+    )
+  ) {
+    try {
+      return (
+        (await response.json()) as ApiResult
+      );
+    } catch {
+      return {
+        success: false,
+        code: 'INVALID_RESPONSE',
+        message:
+          'The server returned an invalid response. Please try again.',
+      };
+    }
+  }
+
+  return {
+    success: false,
+    code: 'SERVER_RESPONSE_ERROR',
+    message:
+      response.ok
+        ? 'The server returned an unexpected response.'
+        : 'The activation service is temporarily unavailable. Please try again.',
+  };
+}
+
+// =====================================================
 // STEP 1 VALIDATION
 // =====================================================
 
-const identifySchema = z.object({
-  cellphone: z
-    .string()
-    .transform(cleanCellphone)
-    .refine(
-      (value) => /^0\d{9}$/.test(value),
-      'Enter a valid 10-digit cellphone number.'
-    ),
+const identifySchema =
+  z.object({
+    cellphone: z
+      .string()
+      .transform(cleanCellphone)
+      .refine(
+        (value) =>
+          /^0\d{9}$/.test(value),
+        'Enter a valid 10-digit cellphone number.'
+      ),
 
-  idLastSix: z
-    .string()
-    .regex(/^\d{6}$/, {
-      message:
-        'Enter the last 6 digits of your ID number.',
-    }),
-});
+    idLastSix: z
+      .string()
+      .regex(/^\d{6}$/, {
+        message:
+          'Enter the last 6 digits of your ID number.',
+      }),
+  });
 
 type IdentifyValues =
-  z.infer<typeof identifySchema>;
+  z.infer<
+    typeof identifySchema
+  >;
 
 // =====================================================
 // STEP 2 VALIDATION
 // =====================================================
 
-const otpSchema = z.object({
-  otp: z
-    .string()
-    .regex(/^\d{6}$/, {
-      message:
-        'Enter the 6-digit OTP sent to your cellphone.',
-    }),
-});
+const otpSchema =
+  z.object({
+    otp: z
+      .string()
+      .regex(/^\d{6}$/, {
+        message:
+          'Enter the 6-digit OTP sent to your cellphone.',
+      }),
+  });
 
 type OtpValues =
-  z.infer<typeof otpSchema>;
+  z.infer<
+    typeof otpSchema
+  >;
 
 // =====================================================
 // STEP 3 VALIDATION
 // =====================================================
 
-const pinSchema = z
-  .object({
-    pin: z
-      .string()
-      .regex(/^\d{6}$/, {
-        message:
-          'PIN must be exactly 6 digits.',
-      }),
+const pinSchema =
+  z
+    .object({
+      pin: z
+        .string()
+        .regex(/^\d{6}$/, {
+          message:
+            'PIN must be exactly 6 digits.',
+        }),
 
-    confirmPin: z
-      .string()
-      .regex(/^\d{6}$/, {
+      confirmPin: z
+        .string()
+        .regex(/^\d{6}$/, {
+          message:
+            'Please confirm your 6-digit PIN.',
+        }),
+    })
+    .refine(
+      (data) =>
+        data.pin ===
+        data.confirmPin,
+      {
         message:
-          'Please confirm your 6-digit PIN.',
-      }),
-  })
-  .refine(
-    (data) =>
-      data.pin === data.confirmPin,
-    {
-      message:
-        'PINs do not match.',
-      path: ['confirmPin'],
-    }
-  );
+          'PINs do not match.',
+        path: ['confirmPin'],
+      }
+    );
 
 type PinValues =
-  z.infer<typeof pinSchema>;
+  z.infer<
+    typeof pinSchema
+  >;
 
 // =====================================================
 // PAGE
 // =====================================================
 
 export default function EmployeeActivatePage() {
-  const { toast } = useToast();
+  const { toast } =
+    useToast();
 
-  const [step, setStep] =
-    useState<ActivationStep>('identify');
+  const [
+    step,
+    setStep,
+  ] =
+    useState<ActivationStep>(
+      'identify'
+    );
 
-  const [cellphone, setCellphone] =
+  const [
+    cellphone,
+    setCellphone,
+  ] =
     useState('');
 
-  const [isLoading, setIsLoading] =
+  const [
+    isLoading,
+    setIsLoading,
+  ] =
     useState(false);
-
-  const confirmationResultRef =
-    useRef<ConfirmationResult | null>(
-      null
-    );
-
-  const recaptchaVerifierRef =
-    useRef<RecaptchaVerifier | null>(
-      null
-    );
 
   const [
     verifiedAuthUid,
     setVerifiedAuthUid,
-  ] = useState('');
+  ] =
+    useState('');
 
-  const [showPin, setShowPin] =
+  const [
+    showPin,
+    setShowPin,
+  ] =
     useState(false);
 
   const [
     showConfirmPin,
     setShowConfirmPin,
-  ] = useState(false);
+  ] =
+    useState(false);
+
+  const confirmationResultRef =
+    useRef<
+      ConfirmationResult | null
+    >(null);
+
+  const recaptchaVerifierRef =
+    useRef<
+      RecaptchaVerifier | null
+    >(null);
 
   // =====================================================
   // FORMS
@@ -194,7 +301,9 @@ export default function EmployeeActivatePage() {
   const identifyForm =
     useForm<IdentifyValues>({
       resolver:
-        zodResolver(identifySchema),
+        zodResolver(
+          identifySchema
+        ),
 
       defaultValues: {
         cellphone: '',
@@ -205,7 +314,9 @@ export default function EmployeeActivatePage() {
   const otpForm =
     useForm<OtpValues>({
       resolver:
-        zodResolver(otpSchema),
+        zodResolver(
+          otpSchema
+        ),
 
       defaultValues: {
         otp: '',
@@ -215,7 +326,9 @@ export default function EmployeeActivatePage() {
   const pinForm =
     useForm<PinValues>({
       resolver:
-        zodResolver(pinSchema),
+        zodResolver(
+          pinSchema
+        ),
 
       defaultValues: {
         pin: '',
@@ -223,107 +336,99 @@ export default function EmployeeActivatePage() {
       },
     });
 
- // =====================================================
-// FIREBASE RECAPTCHA
-// =====================================================
+  // =====================================================
+  // FIREBASE RECAPTCHA
+  // =====================================================
 
-function clearRecaptchaVerifier() {
-  if (recaptchaVerifierRef.current) {
-    try {
-      recaptchaVerifierRef.current.clear();
-    } catch (error) {
-      console.warn(
-        'reCAPTCHA cleanup warning:',
-        error
+  function clearRecaptchaVerifier() {
+    const verifier =
+      recaptchaVerifierRef.current;
+
+    if (verifier) {
+      try {
+        verifier.clear();
+      } catch {
+        // Cleanup failure is non-fatal.
+      }
+
+      recaptchaVerifierRef.current =
+        null;
+    }
+
+    const container =
+      document.getElementById(
+        'recaptcha-container'
+      );
+
+    if (container) {
+      container.innerHTML = '';
+    }
+  }
+
+  function getRecaptchaVerifier() {
+    if (
+      recaptchaVerifierRef.current
+    ) {
+      return (
+        recaptchaVerifierRef.current
       );
     }
 
-    recaptchaVerifierRef.current = null;
-  }
+    const container =
+      document.getElementById(
+        'recaptcha-container'
+      );
 
-  // Firebase / reCAPTCHA may leave rendered
-  // content attached to the container after
-  // verifier.clear().
-  //
-  // Empty the container before another verifier
-  // is allowed to render into it.
-  const container =
-    document.getElementById(
-      'recaptcha-container'
-    );
-
-  if (container) {
-    container.innerHTML = '';
-  }
-}
-
-function getRecaptchaVerifier() {
-  // Reuse the current verifier for the current
-  // phone-auth attempt.
-  if (recaptchaVerifierRef.current) {
-    return recaptchaVerifierRef.current;
-  }
-
-  const container =
-    document.getElementById(
-      'recaptcha-container'
-    );
-
-  if (!container) {
-    throw new Error(
-      'The security verification container is unavailable.'
-    );
-  }
-
-  // Important after a previous failed attempt:
-  // make sure the container is completely clean
-  // before Firebase renders reCAPTCHA again.
-  container.innerHTML = '';
-
-  const verifier =
-    new RecaptchaVerifier(
-      auth,
-      container,
-      {
-        size: 'invisible',
-
-        callback: () => {
-          console.log(
-            'reCAPTCHA verification completed.'
-          );
-        },
-
-        'expired-callback': () => {
-          console.log(
-            'reCAPTCHA expired.'
-          );
-
-          clearRecaptchaVerifier();
-        },
-      }
-    );
-
-  recaptchaVerifierRef.current =
-    verifier;
-
-  return verifier;
-}
-
-// Clean Firebase reCAPTCHA up when the
-// activation page is left/unmounted.
-useEffect(() => {
-  return () => {
-    if (recaptchaVerifierRef.current) {
-      try {
-        recaptchaVerifierRef.current.clear();
-      } catch {
-        // Ignore unmount cleanup errors.
-      }
-
-      recaptchaVerifierRef.current = null;
+    if (!container) {
+      throw new Error(
+        'The security verification service is unavailable. Please refresh the page and try again.'
+      );
     }
-  };
-}, []);
+
+    container.innerHTML = '';
+
+    const verifier =
+      new RecaptchaVerifier(
+        auth,
+        container,
+        {
+          size: 'invisible',
+
+          'expired-callback':
+            () => {
+              clearRecaptchaVerifier();
+            },
+        }
+      );
+
+    recaptchaVerifierRef.current =
+      verifier;
+
+    return verifier;
+  }
+
+  // =====================================================
+  // CLEAN UP RECAPTCHA WHEN PAGE IS LEFT
+  // =====================================================
+
+  useEffect(() => {
+    return () => {
+      const verifier =
+        recaptchaVerifierRef.current;
+
+      if (verifier) {
+        try {
+          verifier.clear();
+        } catch {
+          // Ignore cleanup errors
+          // while unmounting.
+        }
+
+        recaptchaVerifierRef.current =
+          null;
+      }
+    };
+  }, []);
 
   // =====================================================
   // STEP 1
@@ -337,15 +442,14 @@ useEffect(() => {
 
     try {
       // ===============================================
-      // FIRST:
-      // SECURE BIZCENTRAL EMPLOYEE VERIFICATION
+      // BIZCENTRAL EMPLOYEE VERIFICATION
       //
-      // This checks:
+      // Server checks:
       // - employee exists
-      // - cellphone
-      // - employed status
+      // - cellphone matches
+      // - employee is employed
       // - last 6 ID via HMAC
-      // - OTP rate limits
+      // - OTP request limits
       // ===============================================
 
       const response =
@@ -359,20 +463,32 @@ useEffect(() => {
                 'application/json',
             },
 
-            body: JSON.stringify({
-              cellphone:
-                values.cellphone,
+            body:
+              JSON.stringify({
+                cellphone:
+                  values.cellphone,
 
-              idLastSix:
-                values.idLastSix,
-            }),
+                idLastSix:
+                  values.idLastSix,
+              }),
           }
         );
 
       const result =
-        await response.json();
+        await readApiResponse(
+          response
+        );
 
       if (!response.ok) {
+        throw new Error(
+          result.message ||
+            'Unable to verify employee details.'
+        );
+      }
+
+      if (
+        result.success !== true
+      ) {
         throw new Error(
           result.message ||
             'Unable to verify employee details.'
@@ -385,8 +501,8 @@ useEffect(() => {
         );
 
       if (
-        !verifiedCellphone.startsWith(
-          '+27'
+        !/^\+27\d{9}$/.test(
+          verifiedCellphone
         )
       ) {
         throw new Error(
@@ -405,11 +521,11 @@ useEffect(() => {
       const verifier =
         getRecaptchaVerifier();
 
-        const confirmationResult =
+      const confirmationResult =
         await signInWithPhoneNumber(
-            auth,
-            verifiedCellphone,
-            verifier
+          auth,
+          verifiedCellphone,
+          verifier
         );
 
       confirmationResultRef.current =
@@ -428,26 +544,25 @@ useEffect(() => {
         description:
           'A 6-digit verification code has been sent to your cellphone.',
       });
-
-    } catch (error: any) {
-      console.error(
-        'Employee activation / OTP error:',
-        error
-      );
-
-      // Firebase reCAPTCHA instances can
-      // become unusable after a failed
-      // phone-auth attempt.
+    } catch (error: unknown) {
       clearRecaptchaVerifier();
 
+      const firebaseError =
+        error as {
+          code?: string;
+          message?: string;
+        };
+
       let message =
-        error?.message ||
+        firebaseError.message ||
         'Unable to verify your employee details.';
 
-      switch (error?.code) {
+      switch (
+        firebaseError.code
+      ) {
         case 'auth/operation-not-allowed':
           message =
-            'Phone authentication is not enabled in Firebase.';
+            'Phone authentication is currently unavailable.';
           break;
 
         case 'auth/invalid-phone-number':
@@ -457,10 +572,11 @@ useEffect(() => {
 
         case 'auth/unauthorized-domain':
           message =
-            'This website is not authorised for Firebase Phone Authentication.';
+            'This website is not authorised for cellphone verification.';
           break;
 
         case 'auth/captcha-check-failed':
+        case 'auth/invalid-app-credential':
           message =
             'The security verification failed. Please try again.';
           break;
@@ -472,22 +588,30 @@ useEffect(() => {
 
         case 'auth/quota-exceeded':
           message =
-            'The SMS verification quota has been reached. Please contact your administrator.';
+            'The SMS verification service is temporarily unavailable. Please contact your administrator.';
           break;
 
         case 'auth/missing-phone-number':
           message =
             'No cellphone number was supplied for verification.';
           break;
+
+        case 'auth/network-request-failed':
+          message =
+            'A network error occurred. Check your connection and try again.';
+          break;
       }
 
       toast({
-        variant: 'destructive',
+        variant:
+          'destructive',
+
         title:
           'Unable to Activate',
-        description: message,
-      });
 
+        description:
+          message,
+      });
     } finally {
       setIsLoading(false);
     }
@@ -495,7 +619,7 @@ useEffect(() => {
 
   // =====================================================
   // STEP 2
-  // VERIFY REAL FIREBASE OTP
+  // VERIFY FIREBASE OTP
   // =====================================================
 
   async function handleOtp(
@@ -507,15 +631,13 @@ useEffect(() => {
       const confirmationResult =
         confirmationResultRef.current;
 
-      if (!confirmationResult) {
+      if (
+        !confirmationResult
+      ) {
         throw new Error(
           'Your verification session has expired. Please request a new OTP.'
         );
       }
-
-      // ===============================================
-      // FIREBASE VERIFIES SMS CODE
-      // ===============================================
 
       const userCredential =
         await confirmationResult.confirm(
@@ -525,7 +647,9 @@ useEffect(() => {
       const firebaseUser =
         userCredential.user;
 
-      if (!firebaseUser.uid) {
+      if (
+        !firebaseUser.uid
+      ) {
         throw new Error(
           'Firebase could not create the employee authentication identity.'
         );
@@ -545,26 +669,30 @@ useEffect(() => {
         confirmPin: '',
       });
 
-      setStep('create-pin');
+      setStep(
+        'create-pin'
+      );
 
       toast({
         title:
           'Cellphone Verified',
 
         description:
-          'Create your Employee Portal PIN.',
+          'Your cellphone has been verified successfully.',
       });
-
-    } catch (error: any) {
-      console.error(
-        'OTP verification error:',
-        error
-      );
+    } catch (error: unknown) {
+      const firebaseError =
+        error as {
+          code?: string;
+          message?: string;
+        };
 
       let message =
         'The verification code is incorrect or has expired.';
 
-      switch (error?.code) {
+      switch (
+        firebaseError.code
+      ) {
         case 'auth/invalid-verification-code':
           message =
             'The verification code is incorrect.';
@@ -584,14 +712,23 @@ useEffect(() => {
           message =
             'Too many verification attempts have been made. Please try again later.';
           break;
+
+        case 'auth/network-request-failed':
+          message =
+            'A network error occurred. Check your connection and try again.';
+          break;
       }
 
       toast({
-        variant: 'destructive',
-        title: 'Invalid OTP',
-        description: message,
-      });
+        variant:
+          'destructive',
 
+        title:
+          'Invalid OTP',
+
+        description:
+          message,
+      });
     } finally {
       setIsLoading(false);
     }
@@ -600,18 +737,19 @@ useEffect(() => {
   // =====================================================
   // RESEND OTP
   //
-  // IMPORTANT:
-  // We deliberately DO NOT call Firebase directly here.
+  // Resend must pass through the server-side
+  // OTP limiter before requesting another SMS.
   //
-  // Resend must later pass through our server-side
-  // OTP rate limiter again.
+  // We will implement this in the next phase.
   // =====================================================
 
   async function handleResendOtp() {
     toast({
-      title: 'Please wait',
+      title:
+        'Please wait',
+
       description:
-        'OTP resend will be enabled after the first activation test.',
+        'OTP resend is not yet enabled. Use Change number to restart verification.',
     });
   }
 
@@ -631,16 +769,21 @@ useEffect(() => {
 
     setCellphone('');
 
-    setStep('identify');
+    setStep(
+      'identify'
+    );
   }
 
   // =====================================================
   // STEP 3
-  // CREATE PIN
+  // VALIDATE PIN
   //
-  // NOTE:
-  // PIN persistence is deliberately the NEXT backend
-  // step. We will not store a raw PIN in Firestore.
+  // IMPORTANT:
+  //
+  // The PIN is NOT stored here.
+  //
+  // Secure PIN persistence will be handled by the
+  // server-side account activation endpoint.
   // =====================================================
 
   async function handleCreatePin(
@@ -649,7 +792,9 @@ useEffect(() => {
     setIsLoading(true);
 
     try {
-      if (!verifiedAuthUid) {
+      if (
+        !verifiedAuthUid
+      ) {
         throw new Error(
           'Your verified authentication session is missing. Please restart account activation.'
         );
@@ -664,57 +809,59 @@ useEffect(() => {
         );
       }
 
-      /*
-        NEXT IMPLEMENTATION:
+      // =================================================
+      // NEXT SECURITY PHASE
+      //
+      // Send the PIN to a secure server endpoint that:
+      //
+      // 1. Validates the Firebase ID token.
+      // 2. Identifies the authenticated employee.
+      // 3. Securely hashes the PIN.
+      // 4. Stores ONLY the PIN hash.
+      // 5. Links the Firebase UID.
+      // 6. Sets portalActivated = true.
+      //
+      // NEVER store values.pin directly in Firestore.
+      // =================================================
 
-        We will send the PIN to a secure
-        server-side activation endpoint.
+      pinForm.reset({
+        pin: '',
+        confirmPin: '',
+      });
 
-        That endpoint will:
-
-        1. Validate the Firebase identity.
-        2. Match authUid to this employee.
-        3. Securely hash the PIN.
-        4. Store ONLY the PIN hash.
-        5. Save authUid.
-        6. Set portalActivated = true.
-
-        NEVER store values.pin directly
-        in Firestore.
-      */
-
-      console.log(
-        'PIN validated for verified Firebase user.'
+      setShowPin(false);
+      setShowConfirmPin(
+        false
       );
 
-      // TEMPORARY UNTIL THE SECURE PIN
-      // ACTIVATION ENDPOINT IS ADDED.
-      setStep('complete');
+      setStep(
+        'complete'
+      );
 
       toast({
         title:
-          'PIN Validated',
+          'Verification Complete',
 
         description:
-          'OTP verification succeeded. PIN persistence is the next security step.',
+          'Your cellphone has been verified successfully.',
       });
-
-    } catch (error: any) {
-      console.error(
-        'PIN creation error:',
-        error
-      );
+    } catch (error: unknown) {
+      const activationError =
+        error as {
+          message?: string;
+        };
 
       toast({
-        variant: 'destructive',
+        variant:
+          'destructive',
+
         title:
           'Activation Failed',
 
         description:
-          error?.message ||
-          'Unable to create your Employee Portal account.',
+          activationError.message ||
+          'Unable to continue Employee Portal activation.',
       });
-
     } finally {
       setIsLoading(false);
     }
@@ -727,12 +874,11 @@ useEffect(() => {
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-10">
 
-      {/* ===============================================
-          FIREBASE PHONE AUTH
-          INVISIBLE RECAPTCHA CONTAINER
-      =============================================== */}
+      {/* Firebase Phone Auth invisible reCAPTCHA */}
 
-      <div id="recaptcha-container" />
+      <div
+        id="recaptcha-container"
+      />
 
       <div className="w-full max-w-md">
 
@@ -757,14 +903,16 @@ useEffect(() => {
               STEP INDICATOR
           ================================================= */}
 
-          {step !== 'complete' && (
+          {step !==
+            'complete' && (
             <div className="mb-7">
 
               <div className="flex items-center justify-between text-xs">
 
                 <span
                   className={
-                    step === 'identify'
+                    step ===
+                    'identify'
                       ? 'font-semibold text-primary'
                       : 'text-muted-foreground'
                   }
@@ -774,7 +922,8 @@ useEffect(() => {
 
                 <span
                   className={
-                    step === 'otp'
+                    step ===
+                    'otp'
                       ? 'font-semibold text-primary'
                       : 'text-muted-foreground'
                   }
@@ -784,7 +933,8 @@ useEffect(() => {
 
                 <span
                   className={
-                    step === 'create-pin'
+                    step ===
+                    'create-pin'
                       ? 'font-semibold text-primary'
                       : 'text-muted-foreground'
                   }
@@ -801,9 +951,12 @@ useEffect(() => {
               STEP 1
           ================================================= */}
 
-          {step === 'identify' && (
+          {step ===
+            'identify' && (
 
-            <Form {...identifyForm}>
+            <Form
+              {...identifyForm}
+            >
 
               <form
                 onSubmit={
@@ -824,7 +977,9 @@ useEffect(() => {
                     identifyForm.control
                   }
                   name="cellphone"
-                  render={({ field }) => (
+                  render={({
+                    field,
+                  }) => (
 
                     <FormItem>
 
@@ -856,7 +1011,9 @@ useEffect(() => {
                     identifyForm.control
                   }
                   name="idLastSix"
-                  render={({ field }) => (
+                  render={({
+                    field,
+                  }) => (
 
                     <FormItem>
 
@@ -870,11 +1027,13 @@ useEffect(() => {
                           type="password"
                           inputMode="numeric"
                           autoComplete="off"
-                          maxLength={6}
-                          placeholder="••••••"
+                          maxLength={
+                            6
+                          }
                           {...field}
-                          onChange={(event) => {
-
+                          onChange={(
+                            event
+                          ) => {
                             const value =
                               event.target.value.replace(
                                 /\D/g,
@@ -884,7 +1043,6 @@ useEffect(() => {
                             field.onChange(
                               value
                             );
-
                           }}
                         />
 
@@ -900,7 +1058,9 @@ useEffect(() => {
                 <Button
                   type="submit"
                   className="w-full"
-                  disabled={isLoading}
+                  disabled={
+                    isLoading
+                  }
                 >
                   {isLoading
                     ? 'Checking...'
@@ -910,16 +1070,18 @@ useEffect(() => {
               </form>
 
             </Form>
-
           )}
 
           {/* =================================================
-              STEP 2 - OTP VERIFICATION
+              STEP 2 - OTP
           ================================================= */}
 
-          {step === 'otp' && (
+          {step ===
+            'otp' && (
 
-            <Form {...otpForm}>
+            <Form
+              {...otpForm}
+            >
 
               <form
                 onSubmit={
@@ -929,8 +1091,6 @@ useEffect(() => {
                 }
                 className="space-y-5"
               >
-
-                {/* OTP MESSAGE */}
 
                 <div className="text-center">
 
@@ -946,14 +1106,14 @@ useEffect(() => {
 
                 </div>
 
-                {/* OTP INPUT */}
-
                 <FormField
                   control={
                     otpForm.control
                   }
                   name="otp"
-                  render={({ field }) => (
+                  render={({
+                    field,
+                  }) => (
 
                     <FormItem>
 
@@ -966,12 +1126,15 @@ useEffect(() => {
                         <Input
                           inputMode="numeric"
                           autoComplete="one-time-code"
-                          maxLength={6}
+                          maxLength={
+                            6
+                          }
                           className="text-center text-lg tracking-[0.4em]"
                           placeholder="000000"
                           {...field}
-                          onChange={(event) => {
-
+                          onChange={(
+                            event
+                          ) => {
                             const value =
                               event.target.value.replace(
                                 /\D/g,
@@ -981,7 +1144,6 @@ useEffect(() => {
                             field.onChange(
                               value
                             );
-
                           }}
                         />
 
@@ -993,8 +1155,6 @@ useEffect(() => {
 
                   )}
                 />
-
-                {/* CHANGE NUMBER / RESEND */}
 
                 <div className="flex items-center justify-between text-sm">
 
@@ -1026,12 +1186,12 @@ useEffect(() => {
 
                 </div>
 
-                {/* VERIFY BUTTON - BOTTOM */}
-
                 <Button
                   type="submit"
                   className="w-full"
-                  disabled={isLoading}
+                  disabled={
+                    isLoading
+                  }
                 >
                   {isLoading
                     ? 'Verifying...'
@@ -1041,16 +1201,18 @@ useEffect(() => {
               </form>
 
             </Form>
-
           )}
 
           {/* =================================================
               STEP 3 - CREATE PIN
           ================================================= */}
 
-          {step === 'create-pin' && (
+          {step ===
+            'create-pin' && (
 
-            <Form {...pinForm}>
+            <Form
+              {...pinForm}
+            >
 
               <form
                 onSubmit={
@@ -1062,19 +1224,18 @@ useEffect(() => {
               >
 
                 <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
-                  Create a 6-digit PIN. You will use
-                  this PIN with your cellphone number
-                  when logging into the Employee Portal.
+                  Choose a 6-digit PIN for your
+                  Employee Portal account.
                 </div>
-
-                {/* PIN */}
 
                 <FormField
                   control={
                     pinForm.control
                   }
                   name="pin"
-                  render={({ field }) => (
+                  render={({
+                    field,
+                  }) => (
 
                     <FormItem>
 
@@ -1093,11 +1254,15 @@ useEffect(() => {
                                 : 'password'
                             }
                             inputMode="numeric"
-                            maxLength={6}
+                            autoComplete="new-password"
+                            maxLength={
+                              6
+                            }
                             placeholder="••••••"
                             {...field}
-                            onChange={(event) => {
-
+                            onChange={(
+                              event
+                            ) => {
                               const value =
                                 event.target.value.replace(
                                   /\D/g,
@@ -1107,7 +1272,6 @@ useEffect(() => {
                               field.onChange(
                                 value
                               );
-
                             }}
                           />
 
@@ -1115,7 +1279,10 @@ useEffect(() => {
                             type="button"
                             onClick={() =>
                               setShowPin(
-                                !showPin
+                                (
+                                  current
+                                ) =>
+                                  !current
                               )
                             }
                             className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
@@ -1136,14 +1303,14 @@ useEffect(() => {
                   )}
                 />
 
-                {/* CONFIRM PIN */}
-
                 <FormField
                   control={
                     pinForm.control
                   }
                   name="confirmPin"
-                  render={({ field }) => (
+                  render={({
+                    field,
+                  }) => (
 
                     <FormItem>
 
@@ -1162,11 +1329,15 @@ useEffect(() => {
                                 : 'password'
                             }
                             inputMode="numeric"
-                            maxLength={6}
+                            autoComplete="new-password"
+                            maxLength={
+                              6
+                            }
                             placeholder="••••••"
                             {...field}
-                            onChange={(event) => {
-
+                            onChange={(
+                              event
+                            ) => {
                               const value =
                                 event.target.value.replace(
                                   /\D/g,
@@ -1176,7 +1347,6 @@ useEffect(() => {
                               field.onChange(
                                 value
                               );
-
                             }}
                           />
 
@@ -1184,7 +1354,10 @@ useEffect(() => {
                             type="button"
                             onClick={() =>
                               setShowConfirmPin(
-                                !showConfirmPin
+                                (
+                                  current
+                                ) =>
+                                  !current
                               )
                             }
                             className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
@@ -1208,24 +1381,26 @@ useEffect(() => {
                 <Button
                   type="submit"
                   className="w-full"
-                  disabled={isLoading}
+                  disabled={
+                    isLoading
+                  }
                 >
                   {isLoading
-                    ? 'Activating...'
-                    : 'Activate Account'}
+                    ? 'Checking...'
+                    : 'Continue'}
                 </Button>
 
               </form>
 
             </Form>
-
           )}
 
           {/* =================================================
               COMPLETE
           ================================================= */}
 
-          {step === 'complete' && (
+          {step ===
+            'complete' && (
 
             <div className="space-y-5 text-center">
 
@@ -1236,17 +1411,19 @@ useEffect(() => {
               <div>
 
                 <h2 className="text-xl font-semibold">
-                  OTP Test Successful
+                  Cellphone Verified
                 </h2>
 
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Your cellphone has been verified and
-                  your PIN passed validation.
+                  Your cellphone verification was
+                  completed successfully.
                 </p>
 
               </div>
 
-              <Link href="/stafflogin">
+              <Link
+                href="/stafflogin"
+              >
 
                 <Button className="w-full">
                   Continue to Login
@@ -1255,14 +1432,14 @@ useEffect(() => {
               </Link>
 
             </div>
-
           )}
 
         </div>
 
         {/* BACK */}
 
-        {step !== 'complete' && (
+        {step !==
+          'complete' && (
 
           <div className="mt-5 text-center">
 
@@ -1274,7 +1451,6 @@ useEffect(() => {
             </Link>
 
           </div>
-
         )}
 
       </div>
