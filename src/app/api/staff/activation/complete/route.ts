@@ -180,6 +180,38 @@ export async function POST(
     // match the employeePortal record.
     // =================================================
 
+    // TEMP DIAGNOSTIC:
+    // Confirm which employeePortal records the Admin SDK
+    // can actually see in the selected Firestore database.
+
+    const portalDiagnostic =
+    await adminDb
+        .collection('employeePortal')
+        .limit(5)
+        .get();
+
+    console.log(
+    'ACTIVATION DATABASE CHECK',
+    {
+        databaseId:
+        adminDb.databaseId,
+
+        portalCount:
+        portalDiagnostic.size,
+
+        docs:
+        portalDiagnostic.docs.map(
+            (doc) => ({
+            id: doc.id,
+
+            cellphoneNormalized:
+                doc.data()
+                .cellphoneNormalized,
+            })
+        ),
+    }
+    );
+
     const portalQuery =
       await adminDb
         .collection(
