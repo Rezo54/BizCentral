@@ -1,16 +1,25 @@
-import type {NextConfig} from 'next';
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   /* config options here */
 
   devIndicators: false,
-  
+
+  // Keep Firebase Admin as a Node runtime dependency.
+  // Prevent Turbopack from bundling firebase-admin into
+  // the Netlify server function.
+  serverExternalPackages: [
+    'firebase-admin',
+  ],
+
   typescript: {
     ignoreBuildErrors: true,
   },
+
   // eslint: {
   //   ignoreDuringBuilds: true,
   // },
+
   images: {
     remotePatterns: [
       {
