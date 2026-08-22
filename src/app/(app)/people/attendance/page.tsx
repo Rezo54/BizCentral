@@ -3085,7 +3085,7 @@ export default function AttendancePage() {
             </h1>
 
             <p className="text-muted-foreground">
-              Scheduled employees are present by default. Approved leave is automatic and Sunday work must be confirmed.
+              Scheduled employees are present by default. 5-day employees default to Off on Saturday and can be marked Present when they work. Approved leave is automatic and Sunday work must be confirmed.
             </p>
 
           </div>
@@ -4029,6 +4029,15 @@ export default function AttendancePage() {
                                         Absent
                                       </SelectItem>
 
+                                      {isFiveDaySaturday(
+                                        employee,
+                                        selectedDate
+                                      ) && (
+                                          <SelectItem value="off">
+                                            Off
+                                          </SelectItem>
+                                        )}
+
                                     </SelectContent>
 
                                   </Select>
@@ -4173,6 +4182,16 @@ export default function AttendancePage() {
                                     Recorded
                                   </Badge>
 
+                                ) : state.status ===
+                                  "off" ? (
+
+                                  <Badge
+                                    variant="outline"
+                                    className="border-slate-300 bg-slate-100 text-slate-700"
+                                  >
+                                    Off
+                                  </Badge>
+
                                 ) : (
 
                                   <div className="flex items-center gap-1 text-xs text-green-700">
@@ -4262,6 +4281,15 @@ export default function AttendancePage() {
                         >
                           {absentCount} absent
                         </span>
+                        {getDayOfWeek(selectedDate) === 6 && (
+                          <>
+                            {" "}
+                            •{" "}
+                            <span className="font-medium text-slate-700">
+                              {offCount} off
+                            </span>
+                          </>
+                        )}
                       </>
                     )}
 
