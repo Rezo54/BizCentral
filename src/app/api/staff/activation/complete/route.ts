@@ -185,10 +185,10 @@ export async function POST(
     // can actually see in the selected Firestore database.
 
     const portalDiagnostic =
-  await adminDb
-    .collection('employeePortal')
-    .limit(5)
-    .get();
+        await adminDb
+        .collection('employeePortalAccess')
+        .limit(5)
+        .get();
 
     console.log(
     'ACTIVATION DATABASE CHECK',
@@ -198,6 +198,9 @@ export async function POST(
 
         publicProjectId:
         process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+
+        adminClientEmail:
+        process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
 
         databaseId:
         adminDb.databaseId,
@@ -209,9 +212,8 @@ export async function POST(
 
     const portalQuery =
       await adminDb
-        .collection(
-          'employeePortal'
-        )
+        .collection('employeePortalAccess')
+
         .where(
           'cellphoneNormalized',
           '==',
