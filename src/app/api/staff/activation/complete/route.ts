@@ -185,30 +185,25 @@ export async function POST(
     // can actually see in the selected Firestore database.
 
     const portalDiagnostic =
-    await adminDb
-        .collection('employeePortal')
-        .limit(5)
-        .get();
+  await adminDb
+    .collection('employeePortal')
+    .limit(5)
+    .get();
 
     console.log(
     'ACTIVATION DATABASE CHECK',
     {
+        adminProjectId:
+        process.env.FIREBASE_ADMIN_PROJECT_ID,
+
+        publicProjectId:
+        process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+
         databaseId:
         adminDb.databaseId,
 
         portalCount:
         portalDiagnostic.size,
-
-        docs:
-        portalDiagnostic.docs.map(
-            (doc) => ({
-            id: doc.id,
-
-            cellphoneNormalized:
-                doc.data()
-                .cellphoneNormalized,
-            })
-        ),
     }
     );
 
