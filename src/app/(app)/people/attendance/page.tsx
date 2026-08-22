@@ -1,7 +1,7 @@
-// src/app/(app)/attendance/page.tsx
+//src/app/(app)/people/attendance/page.tsx
 // BizCentral HR — Daily Attendance
 // Taskraft can manage all EDOs. EDO users are locked to their own company through userAccess.
-// Normal scheduled workdays default to Present; only absence exceptions are stored.
+// Normal scheduled workdays default to Present. 5-day employees show Off on Saturday unless explicitly marked Present.
 // Approved leave is derived from leaveRequests. Sunday work is explicitly confirmed in attendanceRecords.
 
 "use client";
@@ -120,10 +120,10 @@ type AttendanceException = {
 };
 
 type AttendanceState = {
-  status: "present" | "absent";
+  status: "present" | "absent" | "off";
   reason: string;
   notes: string;
-  originalStatus: "present" | "absent";
+  originalStatus: "present" | "absent" | "off";
   originalReason: string;
   originalNotes: string;
 };
@@ -139,6 +139,14 @@ type ApprovedLeave = {
 };
 
 type SundayWorkRecord = {
+  id: string;
+  employeeId: string;
+  edoId: string;
+  date: string;
+  notes: string;
+};
+
+type SaturdayWorkRecord = {
   id: string;
   employeeId: string;
   edoId: string;
@@ -270,6 +278,14 @@ function createSundayWorkId(
   return `${employeeId}_${date}_sunday_work`;
 }
 
+function createSaturdayWorkId(employeeId: string, date: string) {
+  return `${employeeId}_${date}_saturday_work`;
+}
+
+function isFiveDaySaturday(employee: Employee, dateString: string) {
+  return getDayOfWeek(dateString) === 6 && employee.workWeek !== "6_day";
+}
+
 function getDatesBetween(
   startDate: string,
   endDate: string
@@ -333,9 +349,9 @@ function leaveTypeLabel(
 
   return (
     labels[
-      leaveType
-        .trim()
-        .toLowerCase()
+    leaveType
+      .trim()
+      .toLowerCase()
     ] ||
     leaveType ||
     "Approved Leave"
@@ -363,7 +379,7 @@ function approvedLeaveForDate(
   return leaves.find(
     (leave) =>
       leave.employeeId ===
-        employeeId &&
+      employeeId &&
       leave.fromDate <= date &&
       leave.toDate >= date
   );
@@ -425,6 +441,9 @@ export default function AttendancePage() {
   ] = useState<
     Record<string, SundayWorkRecord>
   >({});
+
+  const [saturdayWorkRecords, setSaturdayWorkRecords] =
+    useState<Record<string, SaturdayWorkRecord>>({});
 
   /* =======================================================
      DAILY REGISTER FILTERS
@@ -534,7 +553,7 @@ export default function AttendancePage() {
               uid:
                 String(
                   data.uid ||
-                    firebaseUser.uid
+                  firebaseUser.uid
                 ),
 
               name:
@@ -545,8 +564,8 @@ export default function AttendancePage() {
               email:
                 String(
                   data.email ||
-                    firebaseUser.email ||
-                    ""
+                  firebaseUser.email ||
+                  ""
                 ),
 
               userType:
@@ -573,8 +592,8 @@ export default function AttendancePage() {
               companyId:
                 data.companyId
                   ? String(
-                      data.companyId
-                    ).trim()
+                    data.companyId
+                  ).trim()
                   : null,
             });
 
@@ -613,15 +632,15 @@ export default function AttendancePage() {
 
       const taskraftUser =
         accessRecord.status ===
-          "approved" &&
+        "approved" &&
         accessRecord.userType ===
-          "taskraft";
+        "taskraft";
 
       const edoUser =
         accessRecord.status ===
-          "approved" &&
+        "approved" &&
         accessRecord.userType ===
-          "edo" &&
+        "edo" &&
         !!accessRecord.companyId;
 
       if (
@@ -691,20 +710,20 @@ export default function AttendancePage() {
       const employeeSource =
         edoUser
           ? query(
-              collection(
-                db,
-                "employees"
-              ),
-              where(
-                "edoId",
-                "==",
-                accessRecord.companyId
-              )
-            )
-          : collection(
+            collection(
               db,
               "employees"
-            );
+            ),
+            where(
+              "edoId",
+              "==",
+              accessRecord.companyId
+            )
+          )
+          : collection(
+            db,
+            "employees"
+          );
 
       const employeeSnapshot =
         await getDocs(
@@ -787,12 +806,12 @@ export default function AttendancePage() {
       if (edoUser) {
         setEdoFilter(
           accessRecord.companyId ||
-            ""
+          ""
         );
 
         setExportEdoFilter(
           accessRecord.companyId ||
-            ""
+          ""
         );
       }
 
@@ -986,38 +1005,49 @@ export default function AttendancePage() {
       const sundayPromise =
         isSunday(selectedDate)
           ? getDocs(
-              query(
-                collection(
-                  db,
-                  "attendanceRecords"
-                ),
-                where(
-                  "edoId",
-                  "==",
-                  edoFilter
-                ),
-                where(
-                  "date",
-                  "==",
-                  selectedDate
-                ),
-                where(
-                  "recordType",
-                  "==",
-                  "sunday_work"
-                )
+            query(
+              collection(
+                db,
+                "attendanceRecords"
+              ),
+              where(
+                "edoId",
+                "==",
+                edoFilter
+              ),
+              where(
+                "date",
+                "==",
+                selectedDate
+              ),
+              where(
+                "recordType",
+                "==",
+                "sunday_work"
               )
             )
+          )
           : Promise.resolve(null);
+
+      const saturdayPromise = getDayOfWeek(selectedDate) === 6
+        ? getDocs(query(
+          collection(db, "attendanceRecords"),
+          where("edoId", "==", edoFilter),
+          where("date", "==", selectedDate),
+          where("recordType", "==", "saturday_work")
+        ))
+        : Promise.resolve(null);
 
       const [
         exceptionSnapshot,
         leaveSnapshot,
         sundaySnapshot,
+        saturdaySnapshot,
       ] = await Promise.all([
         exceptionPromise,
         leavePromise,
         sundayPromise,
+        saturdayPromise,
       ]);
 
       const exceptionMap =
@@ -1069,7 +1099,7 @@ export default function AttendancePage() {
               employeeId:
                 String(
                   data.employeeId ||
-                    ""
+                  ""
                 ),
 
               edoId:
@@ -1090,15 +1120,15 @@ export default function AttendancePage() {
               leaveType:
                 String(
                   data.leaveType ||
-                    data.type ||
-                    ""
+                  data.type ||
+                  ""
                 ),
 
               notes:
                 String(
                   data.notes ||
-                    data.reason ||
-                    ""
+                  data.reason ||
+                  ""
                 ),
             };
           })
@@ -1108,9 +1138,9 @@ export default function AttendancePage() {
               leave.fromDate &&
               leave.toDate &&
               leave.fromDate <=
-                selectedDate &&
+              selectedDate &&
               leave.toDate >=
-                selectedDate
+              selectedDate
           );
 
       setApprovedLeaves(
@@ -1132,7 +1162,7 @@ export default function AttendancePage() {
             const employeeId =
               String(
                 data.employeeId ||
-                  ""
+                ""
               );
 
             if (!employeeId) {
@@ -1171,20 +1201,34 @@ export default function AttendancePage() {
         sundayMap
       );
 
+      const saturdayMap: Record<string, SaturdayWorkRecord> = {};
+      if (saturdaySnapshot) {
+        saturdaySnapshot.docs.forEach((recordDoc) => {
+          const data = recordDoc.data();
+          const employeeId = String(data.employeeId || "");
+          if (!employeeId) return;
+          saturdayMap[employeeId] = { id: data.id || recordDoc.id, employeeId, edoId: String(data.edoId || ""), date: String(data.date || ""), notes: String(data.notes || "") };
+        });
+      }
+      setSaturdayWorkRecords(saturdayMap);
+
       const state:
         Record<
           string,
           AttendanceState
         > = {};
 
-      scheduledEmployees.forEach(
+      activeEmployees.forEach(
         (employee) => {
           const exception =
             exceptionMap.get(
               employee.id
             );
 
-          if (exception) {
+          if (isFiveDaySaturday(employee, selectedDate)) {
+            const worked = !!saturdayMap[employee.id];
+            state[employee.id] = { status: worked ? "present" : "off", reason: "", notes: "", originalStatus: worked ? "present" : "off", originalReason: "", originalNotes: "" };
+          } else if (exception) {
             state[employee.id] = {
               status: "absent",
               reason:
@@ -1249,10 +1293,7 @@ export default function AttendancePage() {
 
   const visibleEmployees =
     useMemo(() => {
-      const source =
-        isSunday(selectedDate)
-          ? activeEmployees
-          : scheduledEmployees;
+      const source = activeEmployees;
 
       const searchText =
         search
@@ -1314,45 +1355,48 @@ export default function AttendancePage() {
   const totalExpected =
     isSunday(selectedDate)
       ? Object.keys(
-          sundayWorkRecords
-        ).length
+        sundayWorkRecords
+      ).length
       : scheduledEmployees.length;
 
   const leaveCount =
     isSunday(selectedDate)
       ? 0
       : scheduledEmployees.filter(
-          (employee) =>
-            !!employeeLeave(
-              employee
-            )
-        ).length;
+        (employee) =>
+          !!employeeLeave(
+            employee
+          )
+      ).length;
 
   const absentCount =
     isSunday(selectedDate)
       ? 0
       : scheduledEmployees.filter(
-          (employee) =>
-            !employeeLeave(
-              employee
-            ) &&
-            attendance[
-              employee.id
-            ]?.status ===
-              "absent"
-        ).length;
+        (employee) =>
+          !employeeLeave(
+            employee
+          ) &&
+          attendance[
+            employee.id
+          ]?.status ===
+          "absent"
+      ).length;
 
   const presentCount =
     isSunday(selectedDate)
       ? Object.keys(
-          sundayWorkRecords
-        ).length
+        sundayWorkRecords
+      ).length
       : Math.max(
-          0,
-          totalExpected -
-            leaveCount -
-            absentCount
-        );
+        0,
+        totalExpected -
+        leaveCount -
+        absentCount
+      );
+
+  const offCount = isSunday(selectedDate) ? 0 : activeEmployees.filter((employee) => attendance[employee.id]?.status === "off").length;
+  const displayedPresentCount = presentCount + (getDayOfWeek(selectedDate) === 6 ? Object.keys(saturdayWorkRecords).length : 0);
 
   /* =======================================================
      UPDATE LOCAL ATTENDANCE
@@ -1372,19 +1416,19 @@ export default function AttendancePage() {
 
         [employeeId]: {
           ...current[
-            employeeId
+          employeeId
           ],
 
           [field]: value,
 
           ...(field ===
             "status" &&
-          value ===
+            value ===
             "present"
             ? {
-                reason: "",
-                notes: "",
-              }
+              reason: "",
+              notes: "",
+            }
             : {}),
         },
       })
@@ -1396,7 +1440,7 @@ export default function AttendancePage() {
   ) {
     const state =
       attendance[
-        employeeId
+      employeeId
       ];
 
     if (!state) {
@@ -1405,11 +1449,11 @@ export default function AttendancePage() {
 
     return (
       state.status !==
-        state.originalStatus ||
+      state.originalStatus ||
       state.reason !==
-        state.originalReason ||
+      state.originalReason ||
       state.notes !==
-        state.originalNotes
+      state.originalNotes
     );
   }
 
@@ -1428,7 +1472,7 @@ export default function AttendancePage() {
     if (
       isEdoUser &&
       employee.edoId !==
-        lockedEdoId
+      lockedEdoId
     ) {
       setError(
         "You can only update attendance for employees in your own EDO business."
@@ -1446,7 +1490,7 @@ export default function AttendancePage() {
 
     const state =
       attendance[
-        employee.id
+      employee.id
       ];
 
     if (!state) {
@@ -1455,12 +1499,34 @@ export default function AttendancePage() {
 
     if (
       state.status ===
-        "absent" &&
+      "absent" &&
       !state.reason
     ) {
       alert(
         `Please select an absence reason for ${employee.firstName} ${employee.surname}.`
       );
+      return;
+    }
+
+    if (isFiveDaySaturday(employee, selectedDate)) {
+      try {
+        setSavingEmployeeId(employee.id);
+        const recordId = createSaturdayWorkId(employee.id, selectedDate);
+        const recordRef = doc(db, "attendanceRecords", recordId);
+        if (state.status === "present") {
+          const record: SaturdayWorkRecord = { id: recordId, employeeId: employee.id, edoId: employee.edoId, date: selectedDate, notes: "" };
+          await setDoc(recordRef, { ...record, employeeCode: employee.employeeCode, employeeName: `${employee.firstName} ${employee.surname}`.trim(), edoName: employee.edoName, site: employee.site, workWeek: employee.workWeek, recordType: "saturday_work", status: "worked", recordedBy: userAccess?.uid || "", recordedByName: userAccess?.name || userAccess?.email || "", updatedAt: serverTimestamp() }, { merge: true });
+          setSaturdayWorkRecords((current) => ({ ...current, [employee.id]: record }));
+        } else {
+          await deleteDoc(recordRef);
+          setSaturdayWorkRecords((current) => { const next = { ...current }; delete next[employee.id]; return next; });
+        }
+        setAttendance((current) => ({ ...current, [employee.id]: { ...current[employee.id], originalStatus: state.status, originalReason: "", originalNotes: "" } }));
+        setMessage(`${employee.firstName} ${employee.surname} Saturday attendance updated.`);
+      } catch (saveError) {
+        console.error("Error saving Saturday attendance:", saveError);
+        setError("Saturday attendance could not be saved.");
+      } finally { setSavingEmployeeId(null); }
       return;
     }
 
@@ -1553,7 +1619,7 @@ export default function AttendancePage() {
 
           [employee.id]: {
             ...current[
-              employee.id
+            employee.id
             ],
 
             originalStatus:
@@ -1615,7 +1681,7 @@ export default function AttendancePage() {
     if (
       isEdoUser &&
       employee.edoId !==
-        lockedEdoId
+      lockedEdoId
     ) {
       setError(
         "You can only confirm Sunday work for employees in your own EDO business."
@@ -1625,7 +1691,7 @@ export default function AttendancePage() {
 
     const existing =
       sundayWorkRecords[
-        employee.id
+      employee.id
       ];
 
     if (
@@ -1683,21 +1749,21 @@ export default function AttendancePage() {
 
       } else {
         const record: SundayWorkRecord =
-          {
-            id:
-              recordId,
+        {
+          id:
+            recordId,
 
-            employeeId:
-              employee.id,
+          employeeId:
+            employee.id,
 
-            edoId:
-              employee.edoId,
+          edoId:
+            employee.edoId,
 
-            date:
-              selectedDate,
+          date:
+            selectedDate,
 
-            notes: "",
-          };
+          notes: "",
+        };
 
         await setDoc(
           recordRef,
@@ -1800,7 +1866,7 @@ export default function AttendancePage() {
     if (
       isEdoUser &&
       effectiveEdoFilter !==
-        lockedEdoId
+      lockedEdoId
     ) {
       alert(
         "You can only download attendance for your own EDO business."
@@ -1841,16 +1907,16 @@ export default function AttendancePage() {
     const exportingAll =
       isTaskraft &&
       effectiveEdoFilter ===
-        "all";
+      "all";
 
     const exportCompany =
       exportingAll
         ? null
         : companies.find(
-            (company) =>
-              company.id ===
-              effectiveEdoFilter
-          );
+          (company) =>
+            company.id ===
+            effectiveEdoFilter
+        );
 
     if (
       !exportingAll &&
@@ -1879,24 +1945,24 @@ export default function AttendancePage() {
       const exceptionSnapshot =
         exportingAll
           ? await getDocs(
+            collection(
+              db,
+              "attendanceExceptions"
+            )
+          )
+          : await getDocs(
+            query(
               collection(
                 db,
                 "attendanceExceptions"
+              ),
+              where(
+                "edoId",
+                "==",
+                effectiveEdoFilter
               )
             )
-          : await getDocs(
-              query(
-                collection(
-                  db,
-                  "attendanceExceptions"
-                ),
-                where(
-                  "edoId",
-                  "==",
-                  effectiveEdoFilter
-                )
-              )
-            );
+          );
 
       const exceptionMap =
         new Map<
@@ -1925,7 +1991,7 @@ export default function AttendancePage() {
           const employeeId =
             String(
               data.employeeId ||
-                ""
+              ""
             );
 
           if (!employeeId) {
@@ -1951,36 +2017,36 @@ export default function AttendancePage() {
       const leaveSnapshot =
         exportingAll
           ? await getDocs(
-              query(
-                collection(
-                  db,
-                  "leaveRequests"
-                ),
-                where(
-                  "status",
-                  "==",
-                  "approved"
-                )
+            query(
+              collection(
+                db,
+                "leaveRequests"
+              ),
+              where(
+                "status",
+                "==",
+                "approved"
               )
             )
+          )
           : await getDocs(
-              query(
-                collection(
-                  db,
-                  "leaveRequests"
-                ),
-                where(
-                  "edoId",
-                  "==",
-                  effectiveEdoFilter
-                ),
-                where(
-                  "status",
-                  "==",
-                  "approved"
-                )
+            query(
+              collection(
+                db,
+                "leaveRequests"
+              ),
+              where(
+                "edoId",
+                "==",
+                effectiveEdoFilter
+              ),
+              where(
+                "status",
+                "==",
+                "approved"
               )
-            );
+            )
+          );
 
       const exportLeaves:
         ApprovedLeave[] =
@@ -1997,7 +2063,7 @@ export default function AttendancePage() {
               employeeId:
                 String(
                   data.employeeId ||
-                    ""
+                  ""
                 ),
 
               edoId:
@@ -2018,15 +2084,15 @@ export default function AttendancePage() {
               leaveType:
                 String(
                   data.leaveType ||
-                    data.type ||
-                    ""
+                  data.type ||
+                  ""
                 ),
 
               notes:
                 String(
                   data.notes ||
-                    data.reason ||
-                    ""
+                  data.reason ||
+                  ""
                 ),
             };
           })
@@ -2034,9 +2100,9 @@ export default function AttendancePage() {
             (leave) =>
               leave.employeeId &&
               leave.fromDate <=
-                exportTo &&
+              exportTo &&
               leave.toDate >=
-                exportFrom
+              exportFrom
           );
 
       /* ---------------------------------------------------
@@ -2046,36 +2112,36 @@ export default function AttendancePage() {
       const sundaySnapshot =
         exportingAll
           ? await getDocs(
-              query(
-                collection(
-                  db,
-                  "attendanceRecords"
-                ),
-                where(
-                  "recordType",
-                  "==",
-                  "sunday_work"
-                )
+            query(
+              collection(
+                db,
+                "attendanceRecords"
+              ),
+              where(
+                "recordType",
+                "==",
+                "sunday_work"
               )
             )
+          )
           : await getDocs(
-              query(
-                collection(
-                  db,
-                  "attendanceRecords"
-                ),
-                where(
-                  "edoId",
-                  "==",
-                  effectiveEdoFilter
-                ),
-                where(
-                  "recordType",
-                  "==",
-                  "sunday_work"
-                )
+            query(
+              collection(
+                db,
+                "attendanceRecords"
+              ),
+              where(
+                "edoId",
+                "==",
+                effectiveEdoFilter
+              ),
+              where(
+                "recordType",
+                "==",
+                "sunday_work"
               )
-            );
+            )
+          );
 
       const sundayMap =
         new Map<
@@ -2104,7 +2170,7 @@ export default function AttendancePage() {
           const employeeId =
             String(
               data.employeeId ||
-                ""
+              ""
             );
 
           if (!employeeId) {
@@ -2551,12 +2617,12 @@ export default function AttendancePage() {
           const edoCompare =
             String(
               a[
-                "EDO Business"
+              "EDO Business"
               ]
             ).localeCompare(
               String(
                 b[
-                  "EDO Business"
+                "EDO Business"
                 ]
               )
             );
@@ -2604,7 +2670,7 @@ export default function AttendancePage() {
             (summary) =>
               summary.expected > 0 ||
               summary.sundayOvertime >
-                0
+              0
           )
           .sort((a, b) => {
             const edoCompare =
@@ -2639,18 +2705,18 @@ export default function AttendancePage() {
                 Math.max(
                   0,
                   summary.expected -
-                    summary.leave
+                  summary.leave
                 );
 
               const percentage =
                 attendanceBase > 0
                   ? (
-                      (
-                        summary.present /
-                        attendanceBase
-                      ) *
-                      100
-                    ).toFixed(1)
+                    (
+                      summary.present /
+                      attendanceBase
+                    ) *
+                    100
+                  ).toFixed(1)
                   : "0.0";
 
               return {
@@ -2674,7 +2740,7 @@ export default function AttendancePage() {
 
                 "Work Week":
                   summary.workWeek ===
-                  "6_day"
+                    "6_day"
                     ? "6 Day"
                     : "5 Day",
 
@@ -2725,10 +2791,10 @@ export default function AttendancePage() {
         exportingAll
           ? companies
           : companies.filter(
-              (company) =>
-                company.id ===
-                effectiveEdoFilter
-            );
+            (company) =>
+              company.id ===
+              effectiveEdoFilter
+          );
 
       const edoSummaryRows =
         companiesForSummary.map(
@@ -2791,12 +2857,12 @@ export default function AttendancePage() {
             const percentage =
               attendanceBase > 0
                 ? (
-                    (
-                      present /
-                      attendanceBase
-                    ) *
-                    100
-                  ).toFixed(1)
+                  (
+                    present /
+                    attendanceBase
+                  ) *
+                  100
+                ).toFixed(1)
                 : "0.0";
 
             return {
@@ -3036,7 +3102,7 @@ export default function AttendancePage() {
                   isEdoUser
                     ? lockedEdoId
                     : edoFilter ||
-                        "all"
+                    "all"
                 );
               }
 
@@ -3067,12 +3133,11 @@ export default function AttendancePage() {
             }
           >
             <RefreshCw
-              className={`mr-2 h-4 w-4 ${
-                loading ||
+              className={`mr-2 h-4 w-4 ${loading ||
                 loadingAttendance
-                  ? "animate-spin"
-                  : ""
-              }`}
+                ? "animate-spin"
+                : ""
+                }`}
             />
             Refresh
           </Button>
@@ -3210,7 +3275,7 @@ export default function AttendancePage() {
 
               {isTaskraft &&
                 exportEdoFilter ===
-                  "all" && (
+                "all" && (
                   <span className="mt-2 block font-medium text-foreground">
                     All EDOs will include an EDO Summary, Attendance Register and Employee Summary.
                   </span>
@@ -3448,29 +3513,29 @@ export default function AttendancePage() {
       {!edoFilter &&
         !loading && (
 
-        <Card>
+          <Card>
 
-          <CardContent className="flex h-48 items-center justify-center">
+            <CardContent className="flex h-48 items-center justify-center">
 
-            <div className="text-center">
+              <div className="text-center">
 
-              <Users className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+                <Users className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
 
-              <p className="font-medium">
-                Select an EDO business
-              </p>
+                <p className="font-medium">
+                  Select an EDO business
+                </p>
 
-              <p className="text-sm text-muted-foreground">
-                The daily attendance register will appear here.
-              </p>
+                <p className="text-sm text-muted-foreground">
+                  The daily attendance register will appear here.
+                </p>
 
-            </div>
+              </div>
 
-          </CardContent>
+            </CardContent>
 
-        </Card>
+          </Card>
 
-      )}
+        )}
 
       {/* ===================================================
           ATTENDANCE
@@ -3533,7 +3598,7 @@ export default function AttendancePage() {
                     </div>
 
                     <div className="text-2xl font-bold text-green-700">
-                      {presentCount}
+                      {displayedPresentCount}
                     </div>
 
                   </div>
@@ -3585,7 +3650,7 @@ export default function AttendancePage() {
                   <UserX
                     className={
                       absentCount >
-                      0
+                        0
                         ? "h-6 w-6 text-red-600"
                         : "h-6 w-6 text-muted-foreground"
                     }
@@ -3596,7 +3661,7 @@ export default function AttendancePage() {
                     <div
                       className={
                         absentCount >
-                        0
+                          0
                           ? "text-sm text-red-700"
                           : "text-sm text-muted-foreground"
                       }
@@ -3607,7 +3672,7 @@ export default function AttendancePage() {
                     <div
                       className={
                         absentCount >
-                        0
+                          0
                           ? "text-2xl font-bold text-red-700"
                           : "text-2xl font-bold"
                       }
@@ -3655,7 +3720,7 @@ export default function AttendancePage() {
                   </Badge>
                 ) : (
                   <Badge variant="outline">
-                    Present by default
+                    Scheduled staff present by default
                   </Badge>
                 )}
 
@@ -3666,7 +3731,7 @@ export default function AttendancePage() {
             <CardContent>
 
               {loading ||
-              loadingAttendance ? (
+                loadingAttendance ? (
 
                 <div className="flex h-48 items-center justify-center">
 
@@ -3732,12 +3797,12 @@ export default function AttendancePage() {
 
                           const sundayWorked =
                             !!sundayWorkRecords[
-                              employee.id
+                            employee.id
                             ];
 
                           const state =
                             attendance[
-                              employee.id
+                            employee.id
                             ] || {
                               status:
                                 "present" as const,
@@ -3797,7 +3862,7 @@ export default function AttendancePage() {
                                     variant="outline"
                                     className={
                                       employee.workWeek ===
-                                      "6_day"
+                                        "6_day"
                                         ? "border-amber-400 bg-amber-100 text-amber-800"
                                         : "border-blue-400 bg-blue-100 text-blue-800"
                                     }
@@ -3856,7 +3921,7 @@ export default function AttendancePage() {
                                   >
 
                                     {savingSundayId ===
-                                    employee.id ? (
+                                      employee.id ? (
                                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                     ) : sundayWorked ? (
                                       <CheckCircle2 className="mr-2 h-4 w-4" />
@@ -3913,7 +3978,7 @@ export default function AttendancePage() {
                                   variant="outline"
                                   className={
                                     employee.workWeek ===
-                                    "6_day"
+                                      "6_day"
                                       ? "border-amber-400 bg-amber-100 text-amber-800"
                                       : "border-blue-400 bg-blue-100 text-blue-800"
                                   }
@@ -4091,7 +4156,7 @@ export default function AttendancePage() {
                                   >
 
                                     {savingEmployeeId ===
-                                    employee.id ? (
+                                      employee.id ? (
                                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                     ) : (
                                       <Save className="mr-2 h-4 w-4" />
@@ -4131,22 +4196,22 @@ export default function AttendancePage() {
                       {visibleEmployees.length ===
                         0 && (
 
-                        <TableRow>
+                          <TableRow>
 
-                          <TableCell
-                            colSpan={7}
-                            className="h-24 text-center text-muted-foreground"
-                          >
-                            {isSunday(
-                              selectedDate
-                            )
-                              ? "No active employees available for Sunday overtime confirmation."
-                              : "No employees scheduled for this date."}
-                          </TableCell>
+                            <TableCell
+                              colSpan={7}
+                              className="h-24 text-center text-muted-foreground"
+                            >
+                              {isSunday(
+                                selectedDate
+                              )
+                                ? "No active employees available for Sunday overtime confirmation."
+                                : "No employees scheduled for this date."}
+                            </TableCell>
 
-                        </TableRow>
+                          </TableRow>
 
-                      )}
+                        )}
 
                     </TableBody>
 
@@ -4159,50 +4224,50 @@ export default function AttendancePage() {
               {!loading &&
                 !loadingAttendance &&
                 visibleEmployees.length >
-                  0 && (
+                0 && (
 
-                <div className="mt-4 text-sm text-muted-foreground">
+                  <div className="mt-4 text-sm text-muted-foreground">
 
-                  {isSunday(
-                    selectedDate
-                  ) ? (
-                    <>
-                      <span className="font-medium text-green-700">
-                        {Object.keys(
-                          sundayWorkRecords
-                        ).length}{" "}
-                        Sunday overtime confirmation(s)
-                      </span>
-                      . Sunday is never assumed worked.
-                    </>
-                  ) : (
-                    <>
-                      {totalExpected} scheduled{" "}
-                      •{" "}
-                      <span className="font-medium text-green-700">
-                        {presentCount} present
-                      </span>{" "}
-                      •{" "}
-                      <span className="font-medium text-blue-700">
-                        {leaveCount} leave
-                      </span>{" "}
-                      •{" "}
-                      <span
-                        className={
-                          absentCount >
-                          0
-                            ? "font-medium text-red-700"
-                            : ""
-                        }
-                      >
-                        {absentCount} absent
-                      </span>
-                    </>
-                  )}
+                    {isSunday(
+                      selectedDate
+                    ) ? (
+                      <>
+                        <span className="font-medium text-green-700">
+                          {Object.keys(
+                            sundayWorkRecords
+                          ).length}{" "}
+                          Sunday overtime confirmation(s)
+                        </span>
+                        . Sunday is never assumed worked.
+                      </>
+                    ) : (
+                      <>
+                        {totalExpected} scheduled{" "}
+                        •{" "}
+                        <span className="font-medium text-green-700">
+                          {displayedPresentCount} present
+                        </span>{" "}
+                        •{" "}
+                        <span className="font-medium text-blue-700">
+                          {leaveCount} leave
+                        </span>{" "}
+                        •{" "}
+                        <span
+                          className={
+                            absentCount >
+                              0
+                              ? "font-medium text-red-700"
+                              : ""
+                          }
+                        >
+                          {absentCount} absent
+                        </span>
+                      </>
+                    )}
 
-                </div>
+                  </div>
 
-              )}
+                )}
 
             </CardContent>
 
