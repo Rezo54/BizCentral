@@ -30,8 +30,17 @@ function parsePage(page: number, text: string): PreviewRow {
 
 async function readPdfPages(file: File): Promise<string[]> {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+
+  // PDF.js requires an explicit worker location in a Next.js/browser build.
+  // Using import.meta.url lets the bundler emit the worker with the application
+  // instead of depending on an external CDN.
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+    "pdfjs-dist/legacy/build/pdf.worker.min.mjs",
+    import.meta.url
+  ).toString();
+
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const pdf = await pdfjs.getDocument({ data: bytes, disableWorker: true }).promise;
+  const pdf = await pdfjs.getDocument({ data: bytes }).promise;
   const pages: string[] = [];
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) { const page = await pdf.getPage(pageNumber); const content = await page.getTextContent(); pages.push(content.items.map((item: any) => ("str" in item ? item.str : "")).join(" ")); }
   return pages;
