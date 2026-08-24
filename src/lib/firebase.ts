@@ -14,6 +14,10 @@ import {
   getAuth,
 } from 'firebase/auth';
 
+import {
+  getStorage,
+} from 'firebase/storage';
+
 // =====================================================
 // FIREBASE CLIENT CONFIG
 // =====================================================
@@ -61,3 +65,5 @@ export const db = getFirestore(
   app,
   'biz-central'
 );
+
+export const storage = getStorage(app);
