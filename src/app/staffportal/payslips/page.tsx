@@ -1,0 +1,54 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, Download, FileText, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+type Payslip = { id: string; payPeriod: string; payDate: string; netPay: number | null; pdfUrl: string };
+
+function periodLabel(period: string) {
+  const [year, month] = period.split('-').map(Number);
+  if (!year || !month) return period;
+  return new Intl.DateTimeFormat('en-ZA', { month: 'long', year: 'numeric' }).format(new Date(year, month - 1, 1));
+}
+
+export default function StaffPayslipsPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [payslips, setPayslips] = useState<Payslip[]>([]);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        const response = await fetch('/api/staff/payslips', { credentials: 'include', cache: 'no-store' });
+        const data = await response.json();
+        if (response.status === 401) { router.replace('/stafflogin'); return; }
+        if (!response.ok || data?.success !== true) throw new Error(data?.message || 'Unable to load payslips.');
+        if (active) setPayslips(Array.isArray(data.payslips) ? data.payslips : []);
+      } catch (e) {
+        if (active) setError(e instanceof Error ? e.message : 'Unable to load payslips.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    load();
+    return () => { active = false; };
+  }, [router]);
+
+  return <div className="min-h-screen bg-muted/30">
+    <header className="border-b border-white/10 bg-[#0d172d]">
+      <div className="mx-auto flex h-[76px] max-w-5xl items-center px-5 sm:px-6">
+        <div><div className="text-xl font-bold text-white">BizCentral</div><p className="mt-1 text-sm font-semibold text-white">Employee Portal</p></div>
+      </div>
+    </header>
+    <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+      <Button variant="ghost" className="mb-4 px-0" asChild><Link href="/staffportal"><ArrowLeft className="mr-2 h-4 w-4"/>Back to Employee Portal</Link></Button>
+      <div className="mb-6"><h1 className="text-2xl font-bold sm:text-3xl">My Payslips</h1><p className="mt-1 text-sm text-muted-foreground">View and download payslips available for your employee record.</p></div>
+      {loading ? <div className="flex items-center gap-2 rounded-2xl border bg-background p-5"><Loader2 className="h-4 w-4 animate-spin"/>Loading payslips...</div> : error ? <div className="rounded-2xl border border-red-500/30 bg-background p-5 text-sm text-red-700">{error}</div> : payslips.length === 0 ? <div className="rounded-2xl border bg-background p-6 text-center"><FileText className="mx-auto h-8 w-8 text-muted-foreground"/><h2 className="mt-3 font-semibold">No payslips available yet</h2><p className="mt-1 text-sm text-muted-foreground">Payslips will appear here once they have been loaded.</p></div> : <div className="space-y-3">{payslips.map((p) => <div key={p.id} className="flex flex-col gap-4 rounded-2xl border bg-background p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary"><FileText className="h-5 w-5"/></div><div><h2 className="font-semibold">{periodLabel(p.payPeriod)}</h2><p className="text-xs text-muted-foreground">Pay date: {p.payDate || 'Not specified'}</p>{p.netPay !== null && <p className="mt-1 text-sm">Net pay: {new Intl.NumberFormat('en-ZA',{style:'currency',currency:'ZAR'}).format(p.netPay)}</p>}</div></div><Button asChild><a href={p.pdfUrl} target="_blank" rel="noopener noreferrer" download><Download className="mr-2 h-4 w-4"/>Download Payslip</a></Button></div>)}</div>}
+    </main>
+  </div>;
+}
