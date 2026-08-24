@@ -45,7 +45,10 @@ function NavSectionBlock({ section, pathname, user, onItemClick }: { section: Na
     return true;
   });
   if (!visible.length) return null;
-  return <div className="space-y-2">{section.heading && <div className="px-1 text-xs uppercase tracking-wide text-[hsl(var(--sidebar-foreground))]/60">{section.heading}</div>}<nav className="flex flex-col gap-1">{visible.map((i) => <NavItemRow key={i.href} item={i} active={pathname.startsWith(i.href)} onClick={onItemClick} />)}</nav></div>;
+  return <div className="space-y-2">{section.heading && <div className="px-1 text-xs uppercase tracking-wide text-[hsl(var(--sidebar-foreground))]/60">{section.heading}</div>}<nav className="flex flex-col gap-1">{visible.map((i) => {
+    const active = i.href === "/people" ? pathname === "/people" : (pathname === i.href || pathname.startsWith(`${i.href}/`));
+    return <NavItemRow key={i.href} item={i} active={active} onClick={onItemClick} />;
+  })}</nav></div>;
 }
 
 export default function AppGroupLayout({ children }: PropsWithChildren) {
