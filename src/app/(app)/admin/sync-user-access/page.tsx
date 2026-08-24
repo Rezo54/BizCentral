@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-
 import {
   collection,
   doc,
@@ -9,18 +8,9 @@ import {
   serverTimestamp,
   setDoc,
 } from "firebase/firestore";
-
 import { db } from "@/lib/firebase";
-
-import {
-  CheckCircle2,
-  Loader2,
-  RefreshCw,
-  ShieldCheck,
-} from "lucide-react";
-
+import { CheckCircle2, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
 import {
   Card,
   CardContent,
@@ -29,10 +19,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-/* =========================================================
-   TYPES
-========================================================= */
-
 type SyncResult = {
   totalUsers: number;
   created: number;
@@ -40,536 +26,168 @@ type SyncResult = {
   errors: string[];
 };
 
-/* =========================================================
-   PAGE
-========================================================= */
-
 export default function SyncUserAccessPage() {
-  const [syncing, setSyncing] =
-    useState(false);
-
-  const [result, setResult] =
-    useState<SyncResult | null>(null);
-
-  const [error, setError] =
-    useState("");
-
-  /* =======================================================
-     SYNC USER ACCESS
-  ======================================================= */
+  const [syncing, setSyncing] = useState(false);
+  const [result, setResult] = useState<SyncResult | null>(null);
+  const [error, setError] = useState("");
 
   async function syncUserAccess() {
     const confirmed = window.confirm(
       "Create/update userAccess records from the existing users collection?"
     );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     try {
       setSyncing(true);
       setError("");
       setResult(null);
 
-      /* ===================================================
-         LOAD EXISTING USERS
-      =================================================== */
-
-      const usersSnapshot =
-        await getDocs(
-          collection(db, "users")
-        );
-
+      const usersSnapshot = await getDocs(collection(db, "users"));
       let created = 0;
       let skipped = 0;
-
       const errors: string[] = [];
 
-      /* ===================================================
-         PROCESS EACH USER
-      =================================================== */
-
-      for (
-        const userDoc of usersSnapshot.docs
-      ) {
-        const user =
-          userDoc.data();
-
-        /* ===============================================
-           FIREBASE AUTH UID
-
-           This becomes the document ID in:
-
-           userAccess/{uid}
-        =============================================== */
-
-        const uid =
-          String(
-            user.uid || ""
-          ).trim();
+      for (const userDoc of usersSnapshot.docs) {
+        const user = userDoc.data();
+        const uid = String(user.uid || "").trim();
 
         if (!uid) {
           skipped++;
-
-          console.warn(
-            "Skipping user without UID:",
-            userDoc.id
-          );
-
+          console.warn("Skipping user without UID:", userDoc.id);
           continue;
         }
 
-        /* ===============================================
-           REFERENCE / AUDIT INFORMATION
-
-           These fields are useful for identifying the
-           user when reviewing access records.
-
-           They must NOT be relied upon for authorization.
-        =============================================== */
-
-        const name =
-          String(
-            user.name || ""
-          ).trim();
-
-        const email =
-          String(
-            user.email || ""
-          )
-            .trim()
-            .toLowerCase();
-
-        /* ===============================================
-           AUTHORIZATION INFORMATION
-        =============================================== */
-
-        const userType =
-          String(
-            user.userType || ""
-          )
-            .trim()
-            .toLowerCase();
-
-        const accessLevel =
-          String(
-            user.accessLevel || ""
-          )
-            .trim()
-            .toLowerCase();
-
-        const status =
-          String(
-            user.status || ""
-          )
-            .trim()
-            .toLowerCase();
-
-        const companyId =
-          user.companyId
-            ? String(
-                user.companyId
-              ).trim()
-            : null;
-
-        /* ===============================================
-           CREATE / UPDATE USER ACCESS
-        =============================================== */
+        const name = String(user.name || "").trim();
+        const email = String(user.email || "").trim().toLowerCase();
+        const userType = String(user.userType || "").trim().toLowerCase();
+        const accessLevel = String(user.accessLevel || "").trim().toLowerCase();
+        const accountRole = String(user.accountRole || "").trim().toLowerCase();
+        const status = String(user.status || "").trim().toLowerCase();
+        const companyId = user.companyId ? String(user.companyId).trim() : null;
 
         try {
           await setDoc(
-            doc(
-              db,
-              "userAccess",
-              uid
-            ),
+            doc(db, "userAccess", uid),
             {
-              /* =========================================
-                 IDENTITY
-              ========================================= */
-
               uid,
-
               name,
-
               email,
-
-              /* =========================================
-                 AUTHORIZATION
-              ========================================= */
-
               userType,
-
               accessLevel,
-
+              accountRole,
               status,
-
               companyId,
-
-              /* =========================================
-                 AUDIT / TRACEABILITY
-
-                 Allows us to trace this access record
-                 back to the original users document.
-              ========================================= */
-
-              syncedFromUserDoc:
-                userDoc.id,
-
-              updatedAt:
-                serverTimestamp(),
+              syncedFromUserDoc: userDoc.id,
+              updatedAt: serverTimestamp(),
             },
-            {
-              /*
-                MERGE = TRUE
-
-                This allows the sync to be run again
-                safely without deleting additional
-                authorization fields that may be added
-                in future.
-              */
-
-              merge: true,
-            }
+            { merge: true }
           );
-
           created++;
-
         } catch (writeError) {
-          console.error(
-            `Failed userAccess sync for ${uid}:`,
-            writeError
-          );
-
+          console.error(`Failed userAccess sync for ${uid}:`, writeError);
           errors.push(uid);
         }
       }
 
-      /* ===================================================
-         COMPLETE
-      =================================================== */
-
       setResult({
-        totalUsers:
-          usersSnapshot.size,
-
+        totalUsers: usersSnapshot.size,
         created,
-
         skipped,
-
         errors,
       });
-
     } catch (syncError) {
-      console.error(
-        "User access sync failed:",
-        syncError
-      );
-
-      setError(
-        "User access sync failed. Check the browser console for details."
-      );
-
+      console.error("User access sync failed:", syncError);
+      setError("User access sync failed. Check the browser console for details.");
     } finally {
       setSyncing(false);
     }
   }
 
-  /* =======================================================
-     PAGE
-  ======================================================= */
-
   return (
     <div className="flex flex-col gap-8">
-
-      {/* ===================================================
-          HEADER
-      =================================================== */}
-
       <div>
-
-        <h1 className="text-3xl font-bold tracking-tight">
-          User Access Sync
-        </h1>
-
+        <h1 className="text-3xl font-bold tracking-tight">User Access Sync</h1>
         <p className="text-muted-foreground">
-          Build and maintain the BizCentral
-          authorization layer from existing
-          user records.
+          Build and maintain the BizCentral authorization layer from existing user records.
         </p>
-
       </div>
 
-      {/* ===================================================
-          ERROR
-      =================================================== */}
-
       {error && (
-
         <div className="rounded-md border border-red-500/40 bg-red-500/5 p-4 text-sm text-red-700">
           {error}
         </div>
-
       )}
 
-      {/* ===================================================
-          SYNC CARD
-      =================================================== */}
-
       <Card>
-
         <CardHeader>
-
           <CardTitle className="flex items-center gap-2">
-
             <ShieldCheck className="h-5 w-5" />
-
             Sync User Access
-
           </CardTitle>
-
           <CardDescription>
-            Creates or updates one userAccess
-            document for every existing BizCentral
-            user using their Firebase Authentication
-            UID.
+            Creates or updates one userAccess document for every existing BizCentral user using their Firebase Authentication UID.
           </CardDescription>
-
         </CardHeader>
 
         <CardContent className="space-y-6">
-
-          {/* ===============================================
-              STRUCTURE INFORMATION
-          =============================================== */}
-
           <div className="rounded-md border bg-muted/30 p-4">
-
-            <div className="font-medium">
-              Authorization Structure
-            </div>
-
+            <div className="font-medium">Authorization Structure</div>
             <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-
-              <div>
-                <span className="font-medium text-foreground">
-                  users
-                </span>
-                {" "}
-                = profile and user information
-              </div>
-
-              <div>
-                <span className="font-medium text-foreground">
-                  userAccess
-                </span>
-                {" "}
-                = security and authorization
-              </div>
-
+              <div><span className="font-medium text-foreground">users</span>{" "}= profile and user information</div>
+              <div><span className="font-medium text-foreground">userAccess</span>{" "}= security and authorization</div>
             </div>
-
           </div>
-
-          {/* ===============================================
-              FIELDS INFORMATION
-          =============================================== */}
 
           <div className="rounded-md border p-4">
-
-            <div className="font-medium">
-              userAccess fields
-            </div>
-
+            <div className="font-medium">userAccess fields</div>
             <div className="mt-3 grid gap-4 text-sm sm:grid-cols-2">
-
               <div>
-
-                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Reference / Audit
-                </div>
-
-                <div className="mt-2">
-                  UID
-                </div>
-
-                <div>
-                  Name
-                </div>
-
-                <div>
-                  Email
-                </div>
-
-                <div>
-                  Source User Document
-                </div>
-
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Reference / Audit</div>
+                <div className="mt-2">UID</div>
+                <div>Name</div>
+                <div>Email</div>
+                <div>Source User Document</div>
               </div>
-
               <div>
-
-                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Authorization
-                </div>
-
-                <div className="mt-2">
-                  User Type
-                </div>
-
-                <div>
-                  Access Level
-                </div>
-
-                <div>
-                  Company ID
-                </div>
-
-                <div>
-                  Status
-                </div>
-
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Authorization</div>
+                <div className="mt-2">User Type</div>
+                <div>Access Level</div>
+                <div>Account Role</div>
+                <div>Company ID</div>
+                <div>Status</div>
               </div>
-
             </div>
-
           </div>
 
-          {/* ===============================================
-              SYNC BUTTON
-          =============================================== */}
-
-          <Button
-            type="button"
-            onClick={syncUserAccess}
-            disabled={syncing}
-          >
-
+          <Button type="button" onClick={syncUserAccess} disabled={syncing}>
             {syncing ? (
-
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-
             ) : (
-
               <RefreshCw className="mr-2 h-4 w-4" />
-
             )}
-
-            {syncing
-              ? "Syncing..."
-              : "Sync User Access"}
-
+            {syncing ? "Syncing..." : "Sync User Access"}
           </Button>
 
-          {/* ===============================================
-              RESULT
-          =============================================== */}
-
           {result && (
-
             <div className="rounded-md border border-green-500/40 bg-green-500/5 p-5">
-
               <div className="flex items-center gap-2 font-medium text-green-700">
-
                 <CheckCircle2 className="h-5 w-5" />
-
                 Sync Complete
-
               </div>
-
               <div className="mt-4 grid gap-4 sm:grid-cols-4">
-
-                {/* USERS FOUND */}
-
-                <div>
-
-                  <div className="text-xs text-muted-foreground">
-                    Users Found
-                  </div>
-
-                  <div className="text-2xl font-bold">
-                    {result.totalUsers}
-                  </div>
-
-                </div>
-
-                {/* SYNCED */}
-
-                <div>
-
-                  <div className="text-xs text-muted-foreground">
-                    Synced
-                  </div>
-
-                  <div className="text-2xl font-bold text-green-700">
-                    {result.created}
-                  </div>
-
-                </div>
-
-                {/* SKIPPED */}
-
-                <div>
-
-                  <div className="text-xs text-muted-foreground">
-                    Skipped
-                  </div>
-
-                  <div className="text-2xl font-bold">
-                    {result.skipped}
-                  </div>
-
-                </div>
-
-                {/* ERRORS */}
-
-                <div>
-
-                  <div className="text-xs text-muted-foreground">
-                    Errors
-                  </div>
-
-                  <div
-                    className={
-                      result.errors.length > 0
-                        ? "text-2xl font-bold text-red-700"
-                        : "text-2xl font-bold"
-                    }
-                  >
-                    {result.errors.length}
-                  </div>
-
-                </div>
-
+                <div><div className="text-xs text-muted-foreground">Users Found</div><div className="text-2xl font-bold">{result.totalUsers}</div></div>
+                <div><div className="text-xs text-muted-foreground">Synced</div><div className="text-2xl font-bold text-green-700">{result.created}</div></div>
+                <div><div className="text-xs text-muted-foreground">Skipped</div><div className="text-2xl font-bold">{result.skipped}</div></div>
+                <div><div className="text-xs text-muted-foreground">Errors</div><div className={result.errors.length > 0 ? "text-2xl font-bold text-red-700" : "text-2xl font-bold"}>{result.errors.length}</div></div>
               </div>
-
-              {/* ===========================================
-                  ERROR UID LIST
-              =========================================== */}
-
               {result.errors.length > 0 && (
-
-                <div className="mt-4 text-sm text-red-700">
-
-                  Failed UIDs:{" "}
-
-                  {result.errors.join(
-                    ", "
-                  )}
-
-                </div>
-
+                <div className="mt-4 text-sm text-red-700">Failed UIDs: {result.errors.join(", ")}</div>
               )}
-
             </div>
-
           )}
-
         </CardContent>
-
       </Card>
-
     </div>
   );
 }
