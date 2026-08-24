@@ -15,34 +15,45 @@ type Employee = { id: string; employeeCode: string; idNumber: string; firstName:
 type PreviewRow = { page: number; employeeCode: string; idNumber: string; employeeName: string; payDate: string; payPeriod: string; periodLabel: string; netPay: string; annualLeave: string; ownerType: "employee" | "edo" | "unknown"; ownerId: string; matched: boolean; matchName: string; matchReason: string };
 
 function cleanId(value: string) { return value.replace(/\D/g, ""); }
+function cleanSpace(value: string) { return value.replace(/\s+/g, " ").trim(); }
 function monthLabel(period: string) { const [year, month] = period.split("-").map(Number); if (!year || !month) return "Unknown period"; return new Intl.DateTimeFormat("en-ZA", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1)); }
 function extract(pattern: RegExp, text: string) { return text.match(pattern)?.[1]?.trim() || ""; }
 
-function parsePage(page: number, text: string): PreviewRow {
-  const employeeCode = extract(/Employee Code\s+([A-Za-z0-9_-]+)/i, text);
-  const employeeName = extract(/Employee\s+(.+?)\s+Employee Code/i, text).replace(/\s*\([^)]*\)\s*$/, "").trim();
-  const idNumber = cleanId(extract(/(?:ID(?:\s+Number|\s+No\.?|\s*#)?|Identity Number)\s*[:\-]?\s*([0-9][0-9\s-]{10,16})/i, text));
-  const rawDate = extract(/Pay Date\s+(\d{4}[\/-]\d{2}[\/-]\d{2})/i, text);
-  const payDate = rawDate.replaceAll("/", "-");
+function parsePage(page: number, rawText: string): PreviewRow {
+  const text = cleanSpace(rawText);
+
+  // Sage layouts vary slightly between companies. Prefer the exact labels used
+  // on the current Sage payslip and retain fallbacks for older exports.
+  const employeeCode = extract(/Employee\s*code\s*[:\-]?\s*([A-Za-z0-9_-]+)/i, text) || extract(/Employee\s*Code\s*[:\-]?\s*([A-Za-z0-9_-]+)/i, text);
+  const employeeNameRaw = extract(/Employee\s*name\s*[:\-]?\s*(.+?)(?=\s+Employee\s*code|\s+Job\s*Title|\s+Employed\s*from|\s+Employee\s*Address)/i, text);
+  const employeeName = employeeNameRaw.replace(/\s*\([^)]*\)\s*$/, "").trim();
+
+  const identityRaw = extract(/Identity\s*Number\s*[:\-]?\s*([0-9][0-9\s-]{11,18}?)(?=\s+[A-Za-z]|$)/i, text)
+    || extract(/ID\s*(?:Number|No\.?|#)\s*[:\-]?\s*([0-9][0-9\s-]{11,18}?)(?=\s+[A-Za-z]|$)/i, text);
+  const idNumber = cleanId(identityRaw).slice(0, 13);
+
+  const rawDate = extract(/Pay\s*date\s*[:\-]?\s*(\d{4}\s*[\/-]\s*\d{2}\s*[\/-]\s*\d{2})/i, text)
+    || extract(/Pay\s*Date\s*[:\-]?\s*(\d{4}\s*[\/-]\s*\d{2}\s*[\/-]\s*\d{2})/i, text);
+  const payDate = rawDate.replace(/\s/g, "").replaceAll("/", "-");
   const payPeriod = payDate ? payDate.slice(0, 7) : "";
-  return { page, employeeCode, idNumber, employeeName, payDate, payPeriod, periodLabel: monthLabel(payPeriod), netPay: extract(/Nett pay\s+([\d\s,.]+)/i, text), annualLeave: extract(/Annual Leave\s+([\d.]+)/i, text), ownerType: "unknown", ownerId: "", matched: false, matchName: "", matchReason: "" };
+
+  const netPay = extract(/(?:Nett|Net)\s*pay\s*[:\-]?\s*(?:R\s*)?([\d\s,.]+)/i, text);
+  const annualLeave = extract(/Annual\s*Leave(?:\s+Closing\s+Balance)?\s*[:\-]?\s*([\d.]+)/i, text);
+
+  return { page, employeeCode, idNumber, employeeName, payDate, payPeriod, periodLabel: monthLabel(payPeriod), netPay, annualLeave, ownerType: "unknown", ownerId: "", matched: false, matchName: "", matchReason: "" };
 }
 
 async function readPdfPages(file: File): Promise<string[]> {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-
-  // PDF.js requires an explicit worker location in a Next.js/browser build.
-  // Using import.meta.url lets the bundler emit the worker with the application
-  // instead of depending on an external CDN.
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-    "pdfjs-dist/legacy/build/pdf.worker.min.mjs",
-    import.meta.url
-  ).toString();
-
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
   const bytes = new Uint8Array(await file.arrayBuffer());
   const pdf = await pdfjs.getDocument({ data: bytes }).promise;
   const pages: string[] = [];
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) { const page = await pdf.getPage(pageNumber); const content = await page.getTextContent(); pages.push(content.items.map((item: any) => ("str" in item ? item.str : "")).join(" ")); }
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+    const page = await pdf.getPage(pageNumber);
+    const content = await page.getTextContent();
+    pages.push(content.items.map((item: any) => ("str" in item ? item.str : "")).join(" "));
+  }
   return pages;
 }
 
@@ -77,7 +88,7 @@ export default function PayslipImportPage() {
         const codeMatches = companyEmployees.filter((e) => e.employeeCode.toLowerCase() === row.employeeCode.toLowerCase());
         const exact = row.idNumber ? codeMatches.find((e) => e.idNumber && e.idNumber === row.idNumber) : undefined;
         if (exact) return { ...row, ownerType: "employee" as const, ownerId: exact.id, matched: true, matchName: `${exact.firstName} ${exact.surname}`.trim(), matchReason: "Employee number + ID number" };
-        if (codeMatches.length === 1 && !row.idNumber) return { ...row, matchName: `${codeMatches[0].firstName} ${codeMatches[0].surname}`.trim(), matchReason: "Employee number found, but ID number was not detected on payslip" };
+        if (codeMatches.length === 1 && !row.idNumber) return { ...row, matchName: `${codeMatches[0].firstName} ${codeMatches[0].surname}`.trim(), matchReason: "Employee number found, but Identity Number was not detected on payslip" };
         const looksLikeEdo = /director/i.test(pageTexts[row.page - 1]);
         if (looksLikeEdo) return { ...row, ownerType: "edo" as const, ownerId: companyId, matched: false, matchName: `${selectedCompany?.name || "EDO"} (Director)`, matchReason: "EDO page detected; employee number + ID verification still required before storage" };
         return { ...row, matchReason: codeMatches.length ? "Employee number found but ID number does not match" : "Employee number not found for selected EDO" };
