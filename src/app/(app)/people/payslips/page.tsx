@@ -12,47 +12,87 @@ import { Badge } from "@/components/ui/badge";
 
 type Company = { id: string; name: string; type: string };
 type Employee = { id: string; employeeCode: string; idNumber: string; firstName: string; surname: string; edoId: string; occupation: string };
+type PdfItem = { text: string; x: number; y: number; width: number; height: number };
+type PdfPage = { items: PdfItem[]; text: string };
 type PreviewRow = { page: number; employeeCode: string; idNumber: string; employeeName: string; payDate: string; payPeriod: string; periodLabel: string; netPay: string; annualLeave: string; ownerType: "employee" | "edo" | "unknown"; ownerId: string; matched: boolean; matchName: string; matchReason: string };
 
 function cleanId(value: string) { return value.replace(/\D/g, ""); }
 function cleanSpace(value: string) { return value.replace(/\s+/g, " ").trim(); }
+function normaliseLabel(value: string) { return cleanSpace(value).toLowerCase().replace(/[:\-]+$/, "").trim(); }
 function monthLabel(period: string) { const [year, month] = period.split("-").map(Number); if (!year || !month) return "Unknown period"; return new Intl.DateTimeFormat("en-ZA", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1)); }
 function extract(pattern: RegExp, text: string) { return text.match(pattern)?.[1]?.trim() || ""; }
 
-function parsePage(page: number, rawText: string): PreviewRow {
-  const text = cleanSpace(rawText);
+function sameRow(a: PdfItem, b: PdfItem, tolerance = 4) { return Math.abs(a.y - b.y) <= Math.max(tolerance, Math.min(a.height || 0, b.height || 0) * 0.6); }
 
-  // Sage layouts vary slightly between companies. Prefer the exact labels used
-  // on the current Sage payslip and retain fallbacks for older exports.
-  const employeeCode = extract(/Employee\s*code\s*[:\-]?\s*([A-Za-z0-9_-]+)/i, text) || extract(/Employee\s*Code\s*[:\-]?\s*([A-Za-z0-9_-]+)/i, text);
-  const employeeNameRaw = extract(/Employee\s*name\s*[:\-]?\s*(.+?)(?=\s+Employee\s*code|\s+Job\s*Title|\s+Employed\s*from|\s+Employee\s*Address)/i, text);
-  const employeeName = employeeNameRaw.replace(/\s*\([^)]*\)\s*$/, "").trim();
-
-  const identityRaw = extract(/Identity\s*Number\s*[:\-]?\s*([0-9][0-9\s-]{11,18}?)(?=\s+[A-Za-z]|$)/i, text)
-    || extract(/ID\s*(?:Number|No\.?|#)\s*[:\-]?\s*([0-9][0-9\s-]{11,18}?)(?=\s+[A-Za-z]|$)/i, text);
-  const idNumber = cleanId(identityRaw).slice(0, 13);
-
-  const rawDate = extract(/Pay\s*date\s*[:\-]?\s*(\d{4}\s*[\/-]\s*\d{2}\s*[\/-]\s*\d{2})/i, text)
-    || extract(/Pay\s*Date\s*[:\-]?\s*(\d{4}\s*[\/-]\s*\d{2}\s*[\/-]\s*\d{2})/i, text);
-  const payDate = rawDate.replace(/\s/g, "").replaceAll("/", "-");
-  const payPeriod = payDate ? payDate.slice(0, 7) : "";
-
-  const netPay = extract(/(?:Nett|Net)\s*pay\s*[:\-]?\s*(?:R\s*)?([\d\s,.]+)/i, text);
-  const annualLeave = extract(/Annual\s*Leave(?:\s+Closing\s+Balance)?\s*[:\-]?\s*([\d.]+)/i, text);
-
-  return { page, employeeCode, idNumber, employeeName, payDate, payPeriod, periodLabel: monthLabel(payPeriod), netPay, annualLeave, ownerType: "unknown", ownerId: "", matched: false, matchName: "", matchReason: "" };
+function valueRightOfLabel(items: PdfItem[], labels: string[], maxDistance = 430): string {
+  const wanted = labels.map(normaliseLabel);
+  const labelsFound = items.filter((item) => wanted.includes(normaliseLabel(item.text)));
+  for (const label of labelsFound) {
+    const candidates = items
+      .filter((item) => item !== label && sameRow(label, item) && item.x >= label.x + Math.max(label.width - 2, 0) && item.x - (label.x + label.width) <= maxDistance)
+      .sort((a, b) => a.x - b.x);
+    if (candidates.length) return cleanSpace(candidates[0].text);
+  }
+  return "";
 }
 
-async function readPdfPages(file: File): Promise<string[]> {
+function valueBelowOrRight(items: PdfItem[], labels: string[], maxDistance = 430): string {
+  const right = valueRightOfLabel(items, labels, maxDistance);
+  if (right) return right;
+  const wanted = labels.map(normaliseLabel);
+  const labelsFound = items.filter((item) => wanted.includes(normaliseLabel(item.text)));
+  for (const label of labelsFound) {
+    const candidates = items
+      .filter((item) => item !== label && Math.abs(item.x - label.x) <= 45 && item.y < label.y && label.y - item.y <= 35)
+      .sort((a, b) => b.y - a.y || a.x - b.x);
+    if (candidates.length) return cleanSpace(candidates[0].text);
+  }
+  return "";
+}
+
+function parsePage(page: number, pdfPage: PdfPage): PreviewRow {
+  const { items, text } = pdfPage;
+
+  let employeeCode = valueRightOfLabel(items, ["Employee Code", "Employee code"]);
+  let employeeNameRaw = valueRightOfLabel(items, ["Employee name", "Employee Name"]);
+  let identityRaw = valueRightOfLabel(items, ["Identity Number", "ID Number", "ID No", "ID No."]);
+  let rawDate = valueRightOfLabel(items, ["Pay date", "Pay Date"]);
+
+  // Coordinate extraction is primary. Regex remains only as a fallback for
+  // Sage exports that package a label and value into one PDF text item.
+  employeeCode ||= extract(/Employee\s*code\s*[:\-]?\s*([A-Za-z0-9_-]+)/i, text);
+  employeeNameRaw ||= extract(/Employee\s*name\s*[:\-]?\s*(.+?)(?=\s+Employee\s*code|\s+Job\s*Title|\s+Employed\s*from|\s+Employee\s*Address)/i, text);
+  identityRaw ||= extract(/Identity\s*Number\s*[:\-]?\s*(\d{13})/i, text) || extract(/ID\s*(?:Number|No\.?|#)\s*[:\-]?\s*(\d{13})/i, text);
+  rawDate ||= extract(/Pay\s*date\s*[:\-]?\s*(\d{4}[\/-]\d{2}[\/-]\d{2})/i, text);
+
+  const employeeName = employeeNameRaw.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  const idNumber = cleanId(identityRaw).slice(0, 13);
+  const dateMatch = rawDate.replace(/\s/g, "").match(/\d{4}[\/-]\d{2}[\/-]\d{2}/)?.[0] || "";
+  const payDate = dateMatch.replaceAll("/", "-");
+  const payPeriod = payDate ? payDate.slice(0, 7) : "";
+
+  let netPay = valueBelowOrRight(items, ["Nett pay", "Net pay", "Nett Pay", "Net Pay"]);
+  let annualLeave = valueBelowOrRight(items, ["Annual Leave", "Annual leave"]);
+  netPay = netPay.match(/[\d][\d\s,.]*/)?.[0]?.trim() || extract(/(?:Nett|Net)\s*pay\s*[:\-]?\s*(?:R\s*)?([\d\s,.]+)/i, text);
+  annualLeave = annualLeave.match(/[\d]+(?:\.\d+)?/)?.[0] || extract(/Annual\s*Leave(?:\s+Closing\s+Balance)?\s*[:\-]?\s*([\d.]+)/i, text);
+
+  return { page, employeeCode: cleanSpace(employeeCode), idNumber, employeeName, payDate, payPeriod, periodLabel: monthLabel(payPeriod), netPay, annualLeave, ownerType: "unknown", ownerId: "", matched: false, matchName: "", matchReason: "" };
+}
+
+async function readPdfPages(file: File): Promise<PdfPage[]> {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
   const bytes = new Uint8Array(await file.arrayBuffer());
   const pdf = await pdfjs.getDocument({ data: bytes }).promise;
-  const pages: string[] = [];
+  const pages: PdfPage[] = [];
+
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
     const page = await pdf.getPage(pageNumber);
     const content = await page.getTextContent();
-    pages.push(content.items.map((item: any) => ("str" in item ? item.str : "")).join(" "));
+    const items: PdfItem[] = content.items
+      .filter((item: any) => "str" in item && cleanSpace(String(item.str || "")))
+      .map((item: any) => ({ text: cleanSpace(String(item.str)), x: Number(item.transform?.[4] || 0), y: Number(item.transform?.[5] || 0), width: Number(item.width || 0), height: Number(item.height || 0) }));
+    pages.push({ items, text: items.map((item) => item.text).join(" ") });
   }
   return pages;
 }
@@ -83,13 +123,13 @@ export default function PayslipImportPage() {
     const file = event.target.files?.[0]; if (!file) return; setFileName(file.name); setRows([]); setError("");
     if (!companyId) { setError("Select the EDO company before choosing the payslip PDF."); event.target.value = ""; return; }
     try {
-      setProcessing(true); const pageTexts = await readPdfPages(file); const parsed = pageTexts.map((text, index) => parsePage(index + 1, text)); const companyEmployees = employees.filter((e) => e.edoId === companyId);
+      setProcessing(true); const pdfPages = await readPdfPages(file); const parsed = pdfPages.map((pdfPage, index) => parsePage(index + 1, pdfPage)); const companyEmployees = employees.filter((e) => e.edoId === companyId);
       const matched = parsed.map((row) => {
         const codeMatches = companyEmployees.filter((e) => e.employeeCode.toLowerCase() === row.employeeCode.toLowerCase());
         const exact = row.idNumber ? codeMatches.find((e) => e.idNumber && e.idNumber === row.idNumber) : undefined;
         if (exact) return { ...row, ownerType: "employee" as const, ownerId: exact.id, matched: true, matchName: `${exact.firstName} ${exact.surname}`.trim(), matchReason: "Employee number + ID number" };
         if (codeMatches.length === 1 && !row.idNumber) return { ...row, matchName: `${codeMatches[0].firstName} ${codeMatches[0].surname}`.trim(), matchReason: "Employee number found, but Identity Number was not detected on payslip" };
-        const looksLikeEdo = /director/i.test(pageTexts[row.page - 1]);
+        const looksLikeEdo = /director/i.test(pdfPages[row.page - 1].text);
         if (looksLikeEdo) return { ...row, ownerType: "edo" as const, ownerId: companyId, matched: false, matchName: `${selectedCompany?.name || "EDO"} (Director)`, matchReason: "EDO page detected; employee number + ID verification still required before storage" };
         return { ...row, matchReason: codeMatches.length ? "Employee number found but ID number does not match" : "Employee number not found for selected EDO" };
       });
@@ -105,7 +145,7 @@ export default function PayslipImportPage() {
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><Upload className="h-5 w-5" /> Upload payslips</CardTitle><CardDescription>Preview-only while we validate Sage extraction and dual-identifier matching.</CardDescription></CardHeader><CardContent className="space-y-5">
       <div><label className="mb-2 block text-sm font-medium">EDO company</label><select className="w-full max-w-xl rounded-md border bg-background px-3 py-2 text-sm" value={companyId} onChange={(e) => { setCompanyId(e.target.value); setRows([]); setFileName(""); }}><option value="">Select EDO company...</option>{companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}</select></div>
       <div><label className="mb-2 block text-sm font-medium">Sage payslip PDF</label><input type="file" accept="application/pdf,.pdf" onChange={handlePdf} disabled={!companyId || processing} className="block w-full max-w-xl text-sm" />{fileName && <div className="mt-2 text-sm text-muted-foreground"><FileText className="mr-1 inline h-4 w-4" />{fileName}</div>}</div>
-      {processing && <div className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" /> Reading payslip pages...</div>}{error && <div className="rounded-md border border-red-500/40 bg-red-500/5 p-3 text-sm text-red-700">{error}</div>}
+      {processing && <div className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" /> Reading payslip coordinates...</div>}{error && <div className="rounded-md border border-red-500/40 bg-red-500/5 p-3 text-sm text-red-700">{error}</div>}
     </CardContent></Card>
     {rows.length > 0 && <Card><CardHeader><CardTitle>Import preview</CardTitle><CardDescription>{rows.length} payslip page{rows.length === 1 ? "" : "s"} detected. Nothing has been saved yet.</CardDescription></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left"><th className="p-2">Page</th><th className="p-2">Employee #</th><th className="p-2">ID number</th><th className="p-2">Payslip name</th><th className="p-2">Matched to</th><th className="p-2">Period</th><th className="p-2 text-right">Net pay</th><th className="p-2 text-right">Annual leave</th><th className="p-2">Status</th></tr></thead><tbody>{rows.map((row) => <tr key={row.page} className="border-b align-top"><td className="p-2">{row.page}</td><td className="p-2 font-medium">{row.employeeCode || "—"}</td><td className="p-2">{row.idNumber || "Not detected"}</td><td className="p-2">{row.employeeName || "—"}</td><td className="p-2"><div>{row.matchName || "No match"}</div><div className="text-xs text-muted-foreground">{row.matchReason}</div></td><td className="p-2"><div>{row.periodLabel}</div><div className="text-xs text-muted-foreground">{row.payDate || "No pay date"}</div></td><td className="p-2 text-right">{row.netPay ? `R ${row.netPay}` : "—"}</td><td className="p-2 text-right">{row.annualLeave || "—"}</td><td className="p-2">{row.matched && row.payPeriod ? <Badge className="gap-1"><CheckCircle2 className="h-3 w-3" /> Ready</Badge> : <Badge variant="destructive">Review</Badge>}</td></tr>)}</tbody></table></div><div className="mt-5 rounded-md border bg-muted/30 p-4 text-sm"><strong>Matching rule:</strong> employee number and South African ID number must both agree before an employee payslip can be imported. This prevents a duplicated or incorrectly assigned employee code from attaching payroll data to the wrong person.</div></CardContent></Card>}
   </div>;
