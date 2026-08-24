@@ -20,7 +20,7 @@ export function StaffPortalHeader({ onLogout }: StaffPortalHeaderProps) {
           display: inline-block;
           flex: none;
           transform-origin: 50% 50%;
-          animation: bizcentral-bolt-load 650ms cubic-bezier(.2,.8,.2,1) both;
+          animation: bizcentral-bolt-load 1400ms cubic-bezier(.2,.8,.2,1) both;
         }
         @media (prefers-reduced-motion: reduce) {
           .bizcentral-bolt { animation: none; }
