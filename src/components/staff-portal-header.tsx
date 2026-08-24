@@ -10,11 +10,27 @@ type StaffPortalHeaderProps = {
 export function StaffPortalHeader({ onLogout }: StaffPortalHeaderProps) {
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0d172d] shadow-sm">
+      <style jsx>{`
+        @keyframes bizcentral-bolt-load {
+          0% { transform: rotate(0deg) scale(0.82); opacity: 0; }
+          65% { transform: rotate(390deg) scale(1.08); opacity: 1; }
+          100% { transform: rotate(360deg) scale(1); opacity: 1; }
+        }
+        .bizcentral-bolt {
+          display: inline-block;
+          flex: none;
+          transform-origin: 50% 50%;
+          animation: bizcentral-bolt-load 650ms cubic-bezier(.2,.8,.2,1) both;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .bizcentral-bolt { animation: none; }
+        }
+      `}</style>
       <div className="mx-auto flex h-[76px] max-w-5xl items-center justify-between px-5 sm:px-6">
         <div className="min-w-0">
           <div className="flex items-center font-bold leading-none text-white">
             <span className="mr-[-2px] text-xl">Bi</span>
-            <svg width="24" height="24" viewBox="0 0 24 24" className="inline-block" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" className="bizcentral-bolt" aria-hidden="true">
               <path d="M4 8 L20 1 L10 10 L22 14 L5 21 L14 11 L4 10 Z" fill="#facc15" />
             </svg>
             <span className="ml-[-2px] text-xl">Central</span>
