@@ -1,49 +1,8 @@
 'use client';
 
-import { LogOut } from 'lucide-react';
+import { useEffect,useState } from 'react';
+import { Bell,CheckCheck,LogOut,X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-
-type StaffPortalHeaderProps = {
-  onLogout?: () => void | Promise<void>;
-};
-
-export function StaffPortalHeader({ onLogout }: StaffPortalHeaderProps) {
-  return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0d172d] shadow-sm">
-      <style jsx>{`
-        @keyframes bizcentral-bolt-load {
-          0% { transform: rotate(0deg) scale(0.82); opacity: 0; }
-          65% { transform: rotate(390deg) scale(1.08); opacity: 1; }
-          100% { transform: rotate(360deg) scale(1); opacity: 1; }
-        }
-        .bizcentral-bolt {
-          display: inline-block;
-          flex: none;
-          transform-origin: 50% 50%;
-          animation: bizcentral-bolt-load 1400ms cubic-bezier(.2,.8,.2,1) both;
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .bizcentral-bolt { animation: none; }
-        }
-      `}</style>
-      <div className="mx-auto flex h-[76px] max-w-5xl items-center justify-between px-5 sm:px-6">
-        <div className="min-w-0">
-          <div className="flex items-center font-bold leading-none text-white">
-            <span className="mr-[-2px] text-xl">Bi</span>
-            <svg width="24" height="24" viewBox="0 0 24 24" className="bizcentral-bolt" aria-hidden="true">
-              <path d="M4 8 L20 1 L10 10 L22 14 L5 21 L14 11 L4 10 Z" fill="#facc15" />
-            </svg>
-            <span className="ml-[-2px] text-xl">Central</span>
-          </div>
-          <p className="mt-1.5 text-sm font-semibold text-white">Employee Portal</p>
-        </div>
-        {onLogout && (
-          <Button type="button" variant="ghost" size="sm" onClick={onLogout} className="ml-3 shrink-0 gap-2 text-white/80 hover:bg-white/10 hover:text-white">
-            <LogOut className="h-5 w-5" />
-            <span className="hidden sm:inline">Sign Out</span>
-          </Button>
-        )}
-      </div>
-    </header>
-  );
-}
+type N={id:string;title:string;message:string;detail:string;read:boolean;createdAt:string};
+type StaffPortalHeaderProps={onLogout?:()=>void|Promise<void>};
+export function StaffPortalHeader({onLogout}:StaffPortalHeaderProps){const[open,setOpen]=useState(false);const[items,setItems]=useState<N[]>([]);const[unread,setUnread]=useState(0);async function load(){try{const r=await fetch('/api/staff/notifications',{credentials:'include',cache:'no-store'});if(!r.ok)return;const j=await r.json();setItems(j.notifications||[]);setUnread(Number(j.unreadCount||0))}catch{}}useEffect(()=>{load()},[]);async function read(id:string){await fetch('/api/staff/notifications',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});setItems(v=>v.map(n=>n.id===id?{...n,read:true}:n));setUnread(v=>Math.max(0,v-1))}async function readAll(){await fetch('/api/staff/notifications',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({all:true})});setItems(v=>v.map(n=>({...n,read:true})));setUnread(0)}return <><header className="sticky top-0 z-50 border-b border-white/10 bg-[#0d172d] shadow-sm"><style jsx>{`@keyframes bizcentral-bolt-load{0%{transform:rotate(0deg) scale(.82);opacity:0}65%{transform:rotate(390deg) scale(1.08);opacity:1}100%{transform:rotate(360deg) scale(1);opacity:1}}.bizcentral-bolt{display:inline-block;flex:none;transform-origin:50% 50%;animation:bizcentral-bolt-load 1400ms cubic-bezier(.2,.8,.2,1) both}@media(prefers-reduced-motion:reduce){.bizcentral-bolt{animation:none}}`}</style><div className="mx-auto flex h-[76px] max-w-5xl items-center justify-between px-5 sm:px-6"><div className="min-w-0"><div className="flex items-center font-bold leading-none text-white"><span className="mr-[-2px] text-xl">Bi</span><svg width="24" height="24" viewBox="0 0 24 24" className="bizcentral-bolt" aria-hidden="true"><path d="M4 8 L20 1 L10 10 L22 14 L5 21 L14 11 L4 10 Z" fill="#facc15" /></svg><span className="ml-[-2px] text-xl">Central</span></div><p className="mt-1.5 text-sm font-semibold text-white">Employee Portal</p></div><div className="flex items-center gap-1"><Button type="button" variant="ghost" size="icon" onClick={()=>{setOpen(true);load()}} className="relative text-white/80 hover:bg-white/10 hover:text-white"><Bell className="h-5 w-5"/>{unread>0&&<span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">{unread>9?'9+':unread}</span>}</Button>{onLogout&&<Button type="button" variant="ghost" size="sm" onClick={onLogout} className="ml-1 shrink-0 gap-2 text-white/80 hover:bg-white/10 hover:text-white"><LogOut className="h-5 w-5"/><span className="hidden sm:inline">Sign Out</span></Button>}</div></div></header>{open&&<div className="fixed inset-0 z-[80] bg-black/40" onClick={()=>setOpen(false)}><aside className="absolute right-0 top-0 h-full w-full max-w-md overflow-y-auto bg-background shadow-2xl" onClick={e=>e.stopPropagation()}><div className="sticky top-0 flex items-center justify-between border-b bg-background p-4"><div><h2 className="font-semibold">Notifications</h2><p className="text-xs text-muted-foreground">{unread} unread</p></div><div className="flex gap-1">{unread>0&&<Button size="sm" variant="ghost" onClick={readAll}><CheckCheck className="mr-2 h-4 w-4"/>Read all</Button>}<Button size="icon" variant="ghost" onClick={()=>setOpen(false)}><X className="h-5 w-5"/></Button></div></div><div className="divide-y">{items.length===0?<p className="p-6 text-sm text-muted-foreground">No notifications yet.</p>:items.map(n=><button key={n.id} onClick={()=>!n.read&&read(n.id)} className={`block w-full p-4 text-left ${n.read?'bg-background':'bg-primary/5'}`}><div className="flex gap-3"><span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${n.read?'bg-slate-300':'bg-primary'}`}/><div><p className="text-sm font-semibold">{n.title}</p><p className="mt-1 text-sm text-muted-foreground">{n.message}</p>{n.detail&&<p className="mt-2 rounded-lg bg-muted/50 p-2 text-xs">{n.detail}</p>}{n.createdAt&&<p className="mt-2 text-[11px] text-muted-foreground">{new Intl.DateTimeFormat('en-ZA',{dateStyle:'medium',timeStyle:'short'}).format(new Date(n.createdAt))}</p>}</div></div></button>)}</div></aside></div>}</>}
