@@ -1,8 +1,9 @@
 {
+  "id": "/",
   "name": "BizCentral",
   "short_name": "BizCentral",
   "description": "BizCentral business management portal",
-  "start_url": "/dashboard",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
