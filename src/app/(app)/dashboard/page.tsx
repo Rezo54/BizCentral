@@ -1,205 +1,181 @@
 'use client';
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import {
-  DollarSign,
-  Users,
-  FileWarning,
-  CheckCircle,
-  Activity,
-} from 'lucide-react';
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from 'recharts';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { getCurrentUser, SessionUser } from '@/lib/session';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { FileWarning, Users, CheckCircle, Activity, Loader2, ArrowRight } from 'lucide-react';
 
-const generateChartData = () => [
-  { name: 'Jan', total: Math.floor(Math.random() * 5000) + 1000 },
-  { name: 'Feb', total: Math.floor(Math.random() * 5000) + 1000 },
-  { name: 'Mar', total: Math.floor(Math.random() * 5000) + 1000 },
-  { name: 'Apr', total: Math.floor(Math.random() * 5000) + 1000 },
-  { name: 'May', total: Math.floor(Math.random() * 5000) + 1000 },
-  { name: 'Jun', total: Math.floor(Math.random() * 5000) + 1000 },
-  { name: 'Jul', total: Math.floor(Math.random() * 5000) + 1000 },
-  { name: 'Aug', total: Math.floor(Math.random() * 5000) + 1000 },
-  { name: 'Sep', total: Math.floor(Math.random() * 5000) + 1000 },
-  { name: 'Oct', total: Math.floor(Math.random() * 5000) + 1000 },
-  { name: 'Nov', total: Math.floor(Math.random() * 5000) + 1000 },
-  { name: 'Dec', total: Math.floor(Math.random() * 5000) + 1000 },
-];
+type Invoice = {
+  id: string;
+  edoId?: string;
+  edoName?: string;
+  amount?: number;
+  status?: string;
+};
+
+function money(value: number) {
+  return new Intl.NumberFormat('en-ZA', {
+    style: 'currency',
+    currency: 'ZAR',
+    minimumFractionDigits: 2,
+  }).format(value || 0);
+}
 
 export default function DashboardPage() {
-  const [data, setData] = useState<any[]>([]);
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [invoiceLoading, setInvoiceLoading] = useState(true);
+  const [invoiceError, setInvoiceError] = useState('');
+  const [pendingInvoices, setPendingInvoices] = useState<Invoice[]>([]);
 
   useEffect(() => {
-    setData(generateChartData());
+    async function loadDashboard() {
+      try {
+        const current = await getCurrentUser();
+        setUser(current);
+        if (!current) return;
+
+        setInvoiceLoading(true);
+        setInvoiceError('');
+
+        const invoicesRef = collection(db, 'invoices');
+        let invoiceQuery;
+
+        if (current.userType === 'edo') {
+          const edoId = current.companyId || current.edoId || '';
+          if (!edoId) {
+            setInvoiceError('Your EDO company is not linked to this user account.');
+            setPendingInvoices([]);
+            return;
+          }
+          invoiceQuery = query(
+            invoicesRef,
+            where('edoId', '==', edoId),
+            where('status', '==', 'pending')
+          );
+        } else if (current.userType === 'taskraft') {
+          invoiceQuery = query(invoicesRef, where('status', '==', 'pending'));
+        } else {
+          setPendingInvoices([]);
+          return;
+        }
+
+        const snap = await getDocs(invoiceQuery);
+        setPendingInvoices(
+          snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Invoice, 'id'>) }))
+        );
+      } catch (e) {
+        console.error('Dashboard invoice load failed:', e);
+        setInvoiceError(e instanceof Error ? e.message : 'Unable to load pending invoices.');
+      } finally {
+        setInvoiceLoading(false);
+        setLoading(false);
+      }
+    }
+
+    loadDashboard();
   }, []);
+
+  const pendingTotal = useMemo(
+    () => pendingInvoices.reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0),
+    [pendingInvoices]
+  );
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[240px] items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const isEdo = user?.userType === 'edo';
+  const invoiceLink = isEdo ? '/invoicing/reliever/approve' : '/invoicing/reliever/approve';
 
   return (
     <div className="flex flex-col gap-8">
       <header>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground">
-          Here&apos;s a quick overview of your business.
+          {isEdo
+            ? 'Your current business actions and employee status.'
+            : 'Current operational actions across BizCentral.'}
         </p>
       </header>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="transition-shadow hover:shadow-md">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Pending Invoices</CardTitle>
+            <FileWarning className="h-4 w-4 text-amber-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">R45,231.89</div>
-            <p className="text-xs text-muted-foreground">
-              +20.1% from last month
-            </p>
+            {invoiceLoading ? (
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            ) : invoiceError ? (
+              <p className="text-sm text-red-600">{invoiceError}</p>
+            ) : (
+              <>
+                <div className="text-3xl font-bold">{pendingInvoices.length}</div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {pendingInvoices.length === 0
+                    ? 'No invoices awaiting approval'
+                    : `${money(pendingTotal)} awaiting approval`}
+                </p>
+                <Button asChild variant="link" className="mt-3 h-auto p-0">
+                  <Link href={invoiceLink}>
+                    {pendingInvoices.length ? 'Review pending invoices' : 'Open invoicing'}
+                    <ArrowRight className="ml-1 h-4 w-4" />
+                  </Link>
+                </Button>
+              </>
+            )}
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Pending Invoices
-            </CardTitle>
-            <FileWarning className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">12</div>
-            <p className="text-xs text-muted-foreground">
-              Totaling R12,050.00
-            </p>
-          </CardContent>
-        </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Leave Requests</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">3</div>
-            <p className="text-xs text-muted-foreground">
-              Awaiting approval
-            </p>
+            <div className="text-3xl font-bold text-muted-foreground">—</div>
+            <p className="mt-1 text-sm text-muted-foreground">Live leave status is next</p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Compliance Status
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Employee Compliance</CardTitle>
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">All Good</div>
-            <p className="text-xs text-muted-foreground">
-              Last checked today
-            </p>
+            <div className="text-3xl font-bold text-muted-foreground">—</div>
+            <p className="mt-1 text-sm text-muted-foreground">Employee compliance is next</p>
           </CardContent>
         </Card>
       </div>
-      <div className="grid gap-4 lg:grid-cols-7">
-        <Card className="lg:col-span-4">
-          <CardHeader>
-            <CardTitle>Overview</CardTitle>
-          </CardHeader>
-          <CardContent className="pl-2">
-            <ResponsiveContainer width="100%" height={350}>
-              <BarChart data={data}>
-                <XAxis
-                  dataKey="name"
-                  stroke="#888888"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  stroke="#888888"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(value) => `$${value}`}
-                />
-                <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-        <Card className="lg:col-span-3">
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>
-              An overview of recent actions and events.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center">
-              <Avatar className="h-9 w-9">
-                <AvatarImage src="https://picsum.photos/seed/a1/40/40" alt="Avatar" data-ai-hint="person"/>
-                <AvatarFallback>JD</AvatarFallback>
-              </Avatar>
-              <div className="ml-4 space-y-1">
-                <p className="text-sm font-medium leading-none">
-                  John Doe
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Submitted a new invoice #INV004.
-                </p>
-              </div>
-              <div className="ml-auto font-medium">5m ago</div>
-            </div>
-             <div className="flex items-center">
-              <Avatar className="h-9 w-9">
-                <AvatarImage src="https://picsum.photos/seed/a2/40/40" alt="Avatar" data-ai-hint="person"/>
-                <AvatarFallback>SA</AvatarFallback>
-              </Avatar>
-              <div className="ml-4 space-y-1">
-                <p className="text-sm font-medium leading-none">
-                  System Alert
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Tax deadline approaching for Q2.
-                </p>
-              </div>
-              <div className="ml-auto font-medium">1h ago</div>
-            </div>
-             <div className="flex items-center">
-              <Avatar className="h-9 w-9">
-                <AvatarImage src="https://picsum.photos/seed/a3/40/40" alt="Avatar" data-ai-hint="person"/>
-                <AvatarFallback>LK</AvatarFallback>
-              </Avatar>
-              <div className="ml-4 space-y-1">
-                <p className="text-sm font-medium leading-none">
-                  Lisa Kemp
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Requested 3 days of paid leave.
-                </p>
-              </div>
-              <div className="ml-auto font-medium">3h ago</div>
-            </div>
-             <div className="flex items-center">
-              <Avatar className="h-9 w-9">
-                <AvatarImage src="https://picsum.photos/seed/a4/40/40" alt="Avatar" data-ai-hint="person"/>
-                <AvatarFallback>MS</AvatarFallback>
-              </Avatar>
-              <div className="ml-4 space-y-1">
-                <p className="text-sm font-medium leading-none">
-                  Mike Spencer
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Updated company policy document.
-                </p>
-              </div>
-              <div className="ml-auto font-medium">1d ago</div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Activity
+          </CardTitle>
+          <CardDescription>
+            Leave activity, upcoming staff leave and administrator messages will appear here.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+            Activity feed will be connected after the dashboard action cards.
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
