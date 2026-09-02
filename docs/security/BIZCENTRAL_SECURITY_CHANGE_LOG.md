@@ -101,6 +101,50 @@ The first retest after this login-only change still demonstrated protected-page 
 
 **Firestore rules changed:** NO.
 
+---
+
+## 2026-09-02 — Security Migration Step 3 — User Administration API
+
+**Purpose:** Move user listing and lifecycle decisions away from direct browser Firestore writes and behind canonical server authorization.
+
+**Implementation:**
+- `src/app/api/admin/users/route.ts` added in commit `4266f465af4ec02e9cf64c191a746a291cc08b71`.
+- Approval role validation hardened server-side in commit `84c4791aa82f9680958848d58928a7db999c4df8`.
+- `src/app/(app)/admin/users/page.tsx` switched from direct Firestore reads/writes to the server API in commit `0388fc5535ef1ffcc06109fc8bfd99413164db7f`.
+- The API requires canonical approved Superadmin authorization before listing users or processing lifecycle decisions.
+- Effective `userType` and `accessLevel` are derived server-side from a finite approved role set. The browser cannot submit arbitrary effective authorization fields.
+- Approval updates `/users` and `/userAccess` together through Admin SDK; rejection disables canonical access while retaining the authorization record; removal marks canonical access removed before deleting the profile.
+- Superadmin self-removal and removal of a Superadmin target through this action are denied server-side.
+
+### Step 3 authorization-boundary tests
+
+| Test | Expected | Actual | Result |
+|---|---|---|---|
+| User Admin GET — missing token | 401 | 401 Unauthorized | PASS |
+| User Admin GET — malformed token | 401 | 401 Unauthorized | PASS |
+| User Admin GET — Benedict/Superadmin | 200 | 200 Authorized | PASS |
+| User Admin malformed PATCH — Benedict/Superadmin | 400 after authorization, no write | 400 Invalid user decision request | PASS |
+| User Admin GET — approved EDO | 403 | 403 Taskraft access required | PASS |
+| User Admin PATCH — approved EDO | 403 before validation/write | 403 Taskraft access required | PASS |
+
+### Step 3 real approval lifecycle test
+
+A disposable test user previously used for the C-001 pending-account test was approved through the new server API as an EDO associated with **2boys 2 girls**.
+
+Observed results:
+1. Pending test user appeared normally on the Superadmin User Approvals page through the API-backed listing — PASS.
+2. Benedict approved the user as EDO through the API-backed page — PASS.
+3. The test account subsequently logged in successfully instead of receiving Access Pending — PASS.
+4. The test account received the correct EDO application view — PASS.
+5. The EDO association resolved to the intended 2boys 2 girls company — PASS.
+6. The approved EDO could not manually access `/admin/users` — PASS.
+
+**Current Step 3 status:** POSITIVE APPROVAL PATH VALIDATED. Reject/remove lifecycle paths and legacy sync-page retirement remain to be completed before Step 3 is closed.
+
+**Firestore rules changed:** NO. Existing production rules remain at baseline while replacement paths are validated.
+
+---
+
 ### Mandatory anomaly-elimination completion gate
 
 The BizCentral security upgrade SHALL NOT be declared complete merely because planned migration steps have been implemented. Before final sign-off, Sol and Benedict Mahlangu must perform a dedicated **Security Anomaly Closure Audit** across the active application and rules.
