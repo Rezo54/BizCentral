@@ -50,14 +50,6 @@ function bearerToken(request: Request): string {
   return header.startsWith('Bearer ') ? header.slice(7).trim() : '';
 }
 
-/**
- * Canonical server-side BizCentral authorization context.
- *
- * IMPORTANT: this helper is additive in Security Migration Step 1.
- * Existing API/UI paths are not changed merely by introducing it.
- * Effective authorization comes from userAccess/{uid}; client-supplied
- * userType/accessLevel/companyId values are never accepted as authority.
- */
 export async function requireAuthContext(request: Request): Promise<AuthContext> {
   const idToken = bearerToken(request);
   if (!idToken) throw new AuthorizationError('Unauthorized', 401);
@@ -74,8 +66,14 @@ export async function requireAuthContext(request: Request): Promise<AuthContext>
   if (!snap.exists) throw new AuthorizationError('User access not found', 403);
 
   const access = (snap.data() ?? {}) as BizAccessRecord;
-  if (normalized(access.status) !== 'approved') {
-    throw new AuthorizationError('User access is not approved', 403);
+  const accessStatus = normalized(access.status);
+  if (accessStatus !== 'approved') {
+    const message =
+      accessStatus === 'pending' ? 'User access is pending' :
+      accessStatus === 'rejected' ? 'User access is rejected' :
+      accessStatus === 'removed' ? 'User access is removed' :
+      'User access is not approved';
+    throw new AuthorizationError(message, 403);
   }
 
   return {
@@ -91,48 +89,36 @@ export async function requireAuthContext(request: Request): Promise<AuthContext>
 }
 
 export function requireTaskraft(context: AuthContext): AuthContext {
-  if (context.userType !== 'taskraft') {
-    throw new AuthorizationError('Taskraft access required', 403);
-  }
+  if (context.userType !== 'taskraft') throw new AuthorizationError('Taskraft access required', 403);
   return context;
 }
 
 export function requireAdmin(context: AuthContext): AuthContext {
   requireTaskraft(context);
-  if (!['admin', 'superadmin', 'super_admin'].includes(context.accessLevel)) {
-    throw new AuthorizationError('Taskraft admin access required', 403);
-  }
+  if (!['admin', 'superadmin', 'super_admin'].includes(context.accessLevel)) throw new AuthorizationError('Taskraft admin access required', 403);
   return context;
 }
 
 export function requireSuperAdmin(context: AuthContext): AuthContext {
   requireTaskraft(context);
-  if (!['superadmin', 'super_admin'].includes(context.accessLevel)) {
-    throw new AuthorizationError('Superadmin access required', 403);
-  }
+  if (!['superadmin', 'super_admin'].includes(context.accessLevel)) throw new AuthorizationError('Superadmin access required', 403);
   return context;
 }
 
 export function requireTaskraftAccountant(context: AuthContext): AuthContext {
   requireTaskraft(context);
-  if (context.accountRole !== 'accountant' && !['superadmin', 'super_admin'].includes(context.accessLevel)) {
-    throw new AuthorizationError('Taskraft accountant access required', 403);
-  }
+  if (context.accountRole !== 'accountant' && !['superadmin', 'super_admin'].includes(context.accessLevel)) throw new AuthorizationError('Taskraft accountant access required', 403);
   return context;
 }
 
 export function requireEdo(context: AuthContext): AuthContext {
-  if (context.userType !== 'edo' || !context.companyId) {
-    throw new AuthorizationError('EDO access required', 403);
-  }
+  if (context.userType !== 'edo' || !context.companyId) throw new AuthorizationError('EDO access required', 403);
   return context;
 }
 
 export function requireCompanyScope(context: AuthContext, companyId: string): AuthContext {
   requireEdo(context);
-  if (!companyId || context.companyId !== companyId) {
-    throw new AuthorizationError('Company access denied', 403);
-  }
+  if (!companyId || context.companyId !== companyId) throw new AuthorizationError('Company access denied', 403);
   return context;
 }
 
