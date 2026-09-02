@@ -69,73 +69,66 @@ Companion documents:
 - User Approvals UI moved to API: `0388fc5535ef1ffcc06109fc8bfd99413164db7f`.
 - Server userAccess sync API: `84bad650681ae99a071699d8f386cb9ace59aae2`.
 - Sync UI moved to server API: `9caa97fdeaddc985d542563553a64e2eb0e79e2e`.
-- Effective `userType` and `accessLevel` are derived server-side; browser cannot grant arbitrary effective authorization.
-- Superadmin self-removal and Superadmin-target removal through the lifecycle action are denied server-side.
 
-### Authorization boundary tests
+**Validated:** Superadmin positive boundary, approved EDO 403 boundary, approval as 2boys 2 girls EDO, rejection and protected-route denial, removal security outcome, and API-backed userAccess repair (92 found / 92 synced / 0 skipped / 0 errors).
 
-| Test | Actual | Result |
-|---|---|---|
-| GET missing token | 401 Unauthorized | PASS |
-| GET malformed token | 401 Unauthorized | PASS |
-| GET Benedict/Superadmin | 200 Authorized | PASS |
-| malformed PATCH Benedict/Superadmin | 400 after authorization, no write | PASS |
-| GET approved EDO | 403 Taskraft access required | PASS |
-| PATCH approved EDO | 403 Taskraft access required before write | PASS |
+**Outstanding evidence item:** explicit valid-Firebase-identity `userAccess.status=removed -> /api/session 403` remains on the final test backlog because the removed fixture failed Firebase Authentication first.
 
-### Approval lifecycle
-
-Disposable test user approved as EDO associated with **2boys 2 girls** through the API-backed User Approvals page. Login succeeded; correct EDO view/company was received; manual `/admin/users` access was denied — PASS.
-
-### userAccess sync repair
-
-Benedict ran the API-backed User Access Sync after migration:
-- Users Found: **92**
-- Synced: **92**
-- Skipped: **0**
-- Errors: **0**
-
-Result: PASS. Browser no longer performs the repair writes.
-
-### Remove lifecycle
-
-The disposable approved EDO was removed through the API-backed User Approvals page. The removed account could not subsequently enter BizCentral. However, its later login attempt failed at Firebase Authentication with invalid credentials before `/api/session` could inspect `userAccess.status=removed`. Therefore:
-- server removal action: PASS;
-- application access after removal: DENIED / PASS security outcome;
-- specific `removed -> canonical /api/session 403` evidence: **NOT YET PROVEN** with this fixture.
-
-Do not misclassify this as a canonical removed-status test. A controlled fixture with valid Firebase credentials must be used later if explicit removed-status 403 evidence is required.
-
-### Reject lifecycle
-
-A fresh disposable pending signup was rejected through the API-backed User Approvals page.
-- Firebase identity remained valid and reached canonical application authorization.
-- Login displayed **Access Rejected — Your BizCentral access request has been rejected.**
-- Manual `/dashboard` access after rejection was blocked.
-- Manual `/admin/users` access after rejection was blocked.
-
-Result: PASS. This proves the canonical rejected-status boundary independently of Firebase Authentication.
-
-### Step 3 conclusion
-
-**Step 3 user administration migration is functionally complete for listing, approval, rejection, removal and userAccess repair.** Positive approval, insufficient-role denial, rejection denial, sync repair and approved-user regression paths have been validated.
-
-**Outstanding evidence item:** explicit valid-Firebase-identity `userAccess.status=removed -> /api/session 403` remains on the security test backlog and final anomaly-closure gate. It does not block progression to Step 4 because removed application access was denied, but it must not be silently treated as tested.
-
-**Firestore rules changed:** NO. Baseline rules remain unchanged pending later collection-by-collection tightening after replacement paths are validated.
+**Firestore rules changed:** NO.
 
 ---
 
-## Step 4 opening audit — Signup authority
+## 2026-09-02 — Security Migration Step 4 — Signup Authority Cleanup
 
-Current signup remains a legacy/high-risk migration target. The browser currently:
-- creates the Firebase Authentication identity;
-- writes `/users` directly;
-- writes `/userAccess/{uid}` directly;
-- stores requested/effective-looking access fields in the profile;
-- currently derives `requestedAccessLevel` in the browser (`standard`, EDO `power_user`, Taskraft `admin`), even though the created canonical `userAccess.accessLevel` is initially `pending`.
+**Purpose:** Ensure registration can request access but cannot grant effective BizCentral authorization.
 
-Step 4 target: signup creates identity plus a pending request/profile only; no browser code may assign effective authorization. Canonical effective authorization remains exclusively an approval-time server decision.
+**Implementation:**
+- `src/app/api/signup/route.ts` added in commit `c374afefe24fa6c310e2bb9dfe41ad70bc1cefa5`.
+- Signup UI moved to that API in commit `723fcad72e7a053afab0a845c97859d94bb3d946`.
+- Browser no longer writes `/users` or `/userAccess` during signup.
+- Browser no longer calculates or submits effective `standard`, `power_user` or `admin` authorization.
+- Firebase Authentication still creates the identity client-side; the resulting ID token is sent to `/api/signup`.
+- Signup API verifies the Firebase token and verifies submitted email matches the authenticated token email.
+- For EDO/Reliever registrations, server independently validates the selected active `signupCompanies` document and its type/sourceId.
+- Server creates a pending `/users` workflow/profile record and an inert canonical `/userAccess/{uid}` record with `status=pending` and `accessLevel=pending`.
+- Effective `userType` and `accessLevel` are introduced only later by the Superadmin approval API.
+- Signup signs the newly created Firebase identity out after the pending request has been created.
+
+### Step 4 live validation
+
+A fresh disposable EDO signup was created through the normal Create Account flow and associated with **2boys 2 girls**.
+
+| Test | Expected | Actual | Result |
+|---|---|---|---|
+| Normal signup | Pending account created | Account created; Await admin approval | PASS |
+| Post-signup Firebase session | Signed out | Returned to login without retained app session | PASS |
+| Immediate login before approval | Canonical pending denial | Access Pending | PASS |
+| Manual `/dashboard` before approval | Denied | Blocked | PASS |
+| Superadmin User Approvals listing | Pending request visible with intended company | Present and associated with 2boys 2 girls | PASS |
+| Superadmin approval as EDO | Server introduces effective authority | Approval successful | PASS |
+| Login after approval | Approved EDO session | Login successful | PASS |
+| Company scope after approval | 2boys 2 girls EDO view only | Correct EDO/company view | PASS |
+| Manual `/admin/users` after approval | Denied | Blocked | PASS |
+| Normal EDO functionality | Remains available | Available | PASS |
+
+### Step 4 conclusion
+
+**STEP 4 PASSED.** Signup is now a request boundary, not an authorization boundary. Selecting Taskraft/EDO/Reliever and a company during registration does not activate corresponding permissions. Canonical effective authority is introduced only by the server-authorized Superadmin approval path.
+
+**Remaining future hardening:** later Firestore rule tightening should remove the now-obsolete browser signup write permissions to `/users` and `/userAccess`. Until that rules phase, the deployed baseline rules remain unchanged by design.
+
+**Firestore rules changed:** NO.
+
+---
+
+## Step 5 opening — Employee Master
+
+Target from the migration audit:
+1. Add Taskraft employee create/update/bulk-import server APIs.
+2. Move privileged employee master writes away from direct browser Firestore mutation.
+3. Verify approved EDO cannot manually call Taskraft employee-master mutations.
+4. Preserve legitimate scoped employee reads and current EDO operational behavior.
+5. Tighten employee browser writes only after replacement paths and positive/negative tests pass.
 
 ---
 
