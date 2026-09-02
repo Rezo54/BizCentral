@@ -57,4 +57,64 @@ Companion documents:
 
 **Production approval:** Not applicable at this additive foundation stage; no production security/rules change.
 
-**Next checkpoint:** Fetch and re-read this change log plus Audit and Matrix before Step 1B. Step 1B should introduce a minimal server session/current-user endpoint using this helper, initially without replacing legacy `getCurrentUser()` consumers.
+**Commit:** `aab4feb91e4e7ddcb8cbc55cd709138be2b9d91f`
+
+---
+
+## 2026-09-02 13:11 SAST — Security Migration Step 1B
+
+**Branch:** `employee-portal`
+
+**Purpose:** Add a minimal canonical current-user/session endpoint backed by the Step 1A server authorization helper, without replacing any existing consumer.
+
+**New file:** `src/app/api/session/route.ts`
+
+**Old path:** Browser `getCurrentUser()` consumers continue to obtain session/profile authority through the legacy `/users` path. Existing APIs continue using their current authorization implementations.
+
+**New path introduced:**
+
+`GET /api/session + Bearer Firebase ID token -> requireAuthContext() -> verified token -> approved userAccess/{uid} -> sanitized canonical user response`
+
+**Response intentionally exposes only current-user fields needed for later UI migration:**
+- `uid`
+- approved `status`
+- normalized `userType`
+- normalized `accessLevel`
+- `accountRole`
+- canonical/fallback `companyId`
+- display `name`
+- verified Firebase Auth `email`
+
+The endpoint does not return the complete `userAccess` document and does not read `/users`.
+
+**Authorization behaviour:**
+- missing Bearer token -> 401;
+- invalid/expired Firebase token -> 401;
+- no `userAccess` record -> 403;
+- non-approved `userAccess` -> 403;
+- approved account -> 200 with canonical current-user data;
+- unexpected server failure -> 500 without leaking internal error details.
+
+**Runtime impact:** None intended. No page, component, session helper or existing API has been switched to `/api/session` in Step 1B.
+
+**Firestore rules changed:** NO.
+
+**Netlify build:** skipped via commit message.
+
+**Checks performed before implementation:**
+- Re-read Security Migration Audit v1.
+- Re-read Rules Migration Matrix v1.
+- Re-read Security Change Log and Step 1A checkpoint.
+- Re-read `src/lib/server-authorization.ts` from the active branch.
+- Confirmed the endpoint consumes the canonical helper rather than duplicating token/userAccess logic.
+- Confirmed it does not accept role/company/status from query parameters or request body.
+- Confirmed it is GET-only and does not mutate Firestore.
+- Confirmed no legacy consumer is removed or changed.
+
+**Testing status:** Structural/code review completed. Live role tests require running Employee Mod with valid Firebase ID tokens for the test accounts. Before replacing `getCurrentUser()`, test at minimum: Taskraft superadmin/admin/standard, EDO A, EDO B, pending/rejected account, missing token and invalid token.
+
+**Reviewed by:** Sol
+
+**Production approval:** Not applicable; additive endpoint only, no production rule or existing workflow change.
+
+**Next checkpoint:** Test `/api/session` locally in Employee Mod with representative accounts. Do not migrate legacy `getCurrentUser()` consumers until those positive/negative tests are recorded as passed.
