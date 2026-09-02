@@ -17,9 +17,7 @@ Companion documents:
 
 **Old path:** Existing APIs each implement their own Firebase ID-token verification and `userAccess` lookup. Existing browser/session/UI paths remain unchanged.
 
-**New path introduced (not yet wired into existing endpoints):**
-
-`Bearer Firebase ID token -> verifyIdToken -> userAccess/{uid} -> require approved -> normalized AuthContext -> action-specific require* guard`
+**New path introduced (not yet wired into existing endpoints):** `Bearer Firebase ID token -> verifyIdToken -> userAccess/{uid} -> require approved -> normalized AuthContext -> action-specific require* guard`.
 
 **Authorization source:** `userAccess/{uid}` only. The helper does not query `/users` and does not accept client-supplied role/company fields as authority.
 
@@ -29,67 +27,81 @@ Companion documents:
 
 **Runtime impact:** None intended. No existing API imports this helper yet. No UI code changed. No Firestore access path changed.
 
-**Firestore rules changed:** NO.
-
-**Netlify build:** skipped.
-
-**Reviewed by:** Sol
-
-**Production approval:** Not applicable at this additive foundation stage.
-
-**Commit:** `aab4feb91e4e7ddcb8cbc55cd709138be2b9d91f`
+**Firestore rules changed:** NO. **Netlify build:** skipped. **Reviewed by:** Sol. **Commit:** `aab4feb91e4e7ddcb8cbc55cd709138be2b9d91f`.
 
 ---
 
 ## 2026-09-02 — Security Migration Step 1B
 
-**Branch:** `employee-portal`
+**Purpose:** Add and validate `/api/session` backed by canonical `userAccess`, without replacing existing consumers.
 
-**Purpose:** Add and validate a minimal canonical current-user/session endpoint backed by the Step 1A server authorization helper, without replacing any existing consumer.
+**Files:** `src/app/api/session/route.ts`; diagnostic `src/app/(app)/admin/security-test/page.tsx`.
 
-**New file:** `src/app/api/session/route.ts`
-
-**Diagnostic file:** `src/app/(app)/admin/security-test/page.tsx`
-
-**Old path:** Browser `getCurrentUser()` consumers continue to obtain session/profile authority through the legacy `/users` path. Existing APIs continue using their current authorization implementations.
-
-**New path introduced:** `GET /api/session + Bearer Firebase ID token -> requireAuthContext() -> verified token -> approved userAccess/{uid} -> sanitized canonical user response`.
-
-**Response fields:** `uid`, approved `status`, normalized `userType`, normalized `accessLevel`, `accountRole`, canonical/fallback `companyId`, display `name`, verified Firebase Auth `email`.
-
-The endpoint does not return the complete `userAccess` document and does not read `/users`.
-
-**Authorization behaviour:** missing/invalid token -> 401; no userAccess/non-approved userAccess -> 403; approved account -> 200; unexpected server failure -> 500 without internal details.
-
-**Runtime impact:** None intended. No existing consumer has been switched to `/api/session`.
-
-**Firestore rules changed:** NO.
-
-**Netlify build:** skipped.
-
-### Live Employee Mod test results
+**Live Employee Mod test results:**
 
 | Test | Expected | Actual | Result |
 |---|---|---|---|
-| Taskraft Superadmin — Benedict Mahlangu | 200, approved, taskraft, superadmin | 200, approved, taskraft, superadmin; accountRole accountant; no company scope | PASS |
-| EDO — 2boysTest | 200, approved, edo, power_user, own companyId | 200, approved, edo, power_user, company `edo-2-boys-2-girls-pty-ltd` | PASS |
-| Unauthenticated direct GET `/api/session` | 401 Unauthorized | `{"ok":false,"error":"Unauthorized"}` | PASS |
+| Taskraft Superadmin — Benedict Mahlangu | 200, approved, taskraft, superadmin | 200, approved, taskraft, superadmin; accountant | PASS |
+| EDO — 2boysTest | 200, approved, edo, power_user, own companyId | 200, approved, edo, power_user, `edo-2-boys-2-girls-pty-ltd` | PASS |
+| Unauthenticated | 401 | 401 Unauthorized | PASS |
 
-**Security conclusions from tests:**
-- The endpoint authenticates independently of page/UI visibility.
-- Effective role/type data is successfully resolved from canonical `userAccess` for both Taskraft and EDO account classes.
-- EDO company scope is correctly returned from canonical authorization data.
-- `accountRole` remains independent of `accessLevel`, as intended.
-- No Firestore rule was modified to make these tests pass.
+**Implementation commits:** `eecbc7e89250247f4f1933158ccd06769da9258c`; `3f16c29c0afe55832fc91235aba888c18eaab947`.
 
-**Remaining negative tests before legacy session replacement:** missing userAccess, pending/rejected/removed userAccess, invalid/expired token. Additional positive role variants (Taskraft admin/standard and another EDO) should be exercised as accounts are available, but the two principal approved account classes are now proven.
+---
+
+## 2026-09-02 — Security Migration Step 1C / CONFIRMED CRITICAL FINDING C-001
+
+**Severity:** CRITICAL
+
+**Status:** OPEN — must be eliminated and regression-tested before the security upgrade is considered complete.
+
+**Finding:** An authenticated Firebase user whose BizCentral account is still pending approval was able to manually navigate to the Reliever Invoice Approval page and successfully approve an invoice.
+
+**Observed test path:**
+1. A new test user was created through the normal application workflow and deliberately left unapproved.
+2. Login with correct credentials authenticated the Firebase identity, then the legacy login UI displayed `Your account is waiting approval`.
+3. The pending Firebase session remained authenticated.
+4. `/api/session` correctly rejected that same identity with HTTP 403 `User access is not approved` — canonical server authorization PASS.
+5. The pending user manually opened the invoice approval page.
+6. The legacy invoice page obtained authority from `src/lib/session.ts` / `/users`, which does not require approved status.
+7. The page allowed the invoice approval action and the direct Firestore `updateDoc()` succeeded.
+
+**Confirmed root causes:**
+- authentication and authorization are conflated in legacy browser paths;
+- failed/pending application login leaves the Firebase identity signed in;
+- legacy `getCurrentUser()` reads `/users` and does not enforce approved `userAccess.status`;
+- invoice approval is a direct browser Firestore mutation;
+- the baseline invoice rule permits an approval/status-field mutation without sufficiently restricting the actor.
+
+**Immediate migration implications:**
+- Add defensive sign-out when login discovers missing/non-approved application access. This is defense-in-depth only, not the final authorization fix.
+- Continue canonical session migration; do not treat UI navigation guards as security.
+- Bring invoice server/API migration forward as the first business-state module after the canonical identity/user-administration foundation is safe enough to support it.
+- Invoice approval/rejection must be authorized server-side and must derive actor, EDO/company scope, timestamps and permitted state transition on the server.
+- Invoice Firestore client writes must ultimately be denied after API migration and tests.
+
+### Mandatory anomaly-elimination completion gate
+
+The BizCentral security upgrade SHALL NOT be declared complete merely because planned migration steps have been implemented. Before final sign-off, Sol and Benedict Mahlangu must perform a dedicated **Security Anomaly Closure Audit** across the active application and rules.
+
+Completion requires all of the following:
+1. Every Critical/High/Legacy/Transitional finding in the Audit, Matrix and Change Log is marked `CLOSED`, `ACCEPTED WITH DOCUMENTED RATIONALE`, or explicitly deferred by Benedict with a recorded reason. No unexplained anomaly may remain.
+2. Search the active branch for remaining direct privileged Firestore/Storage mutations (`addDoc`, `setDoc`, `updateDoc`, `deleteDoc`, `writeBatch`, client upload/delete operations) and classify every occurrence. Privileged/business-state writes must be server-authorized unless explicitly justified.
+3. Search for all remaining consumers of legacy `getCurrentUser()`, `/users` role/access fields, `src/lib/acess.ts`, legacy role aliases, hard-coded privileged UIDs and client-side role checks used as authority. Remove or reclassify presentation-only uses.
+4. Verify every protected API independently rejects unauthenticated, missing-userAccess, pending/rejected/removed and insufficient-role callers.
+5. Verify cross-company/ownership isolation, including EDO A -> EDO B denial, manipulated IDs, and staff route/schedule scope.
+6. Verify sensitive state transitions (invoice approval, leave review, attendance, employee master, rates, crate imports, payroll/imports, user approval) cannot be performed by manually entering a URL or directly calling Firestore from an authenticated but unauthorized browser.
+7. Re-audit the final Firestore rules collection-by-collection against the final application paths; ensure old client writes are denied after their API migrations.
+8. Remove temporary security diagnostic/test endpoints/pages or explicitly secure and retain them.
+9. Run regression tests for approved users so hardening does not break legitimate workflows.
+10. Produce a final closure report listing every discovered anomaly, remediation commit, rule change, test evidence and final disposition.
+
+**Definition of done:** There must be no known unexplained authorization anomaly remaining at final security sign-off. A working UI is not evidence of security; the server/API and final rules must enforce the intended authorization independently.
+
+**Firestore rules changed during discovery:** NO.
+
+**Production data note:** The test demonstrated a real invoice approval mutation. The affected test invoice/action should be identified and reversed/cleaned up through an authorized account if it was not intended to remain approved; do not hide the evidence from the audit log if an audit record exists.
 
 **Reviewed by:** Sol
 
-**Production approval:** Not applicable; additive endpoint/test page only.
-
-**Implementation commits:**
-- `eecbc7e89250247f4f1933158ccd06769da9258c` — canonical session endpoint.
-- `3f16c29c0afe55832fc91235aba888c18eaab947` — temporary canonical session test page.
-
-**Next checkpoint — Step 1C:** strengthen and complete the canonical session negative-test harness without altering live userAccess data, then record the results. Do not replace `getCurrentUser()` consumers until negative authorization behavior is proven.
+**Owner requirement:** Benedict Mahlangu explicitly required that this Critical finding be noted and that all anomalies discovered during the upgrade be removed/resolved by the end of the security upgrade.
