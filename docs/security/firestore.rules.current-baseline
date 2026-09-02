@@ -1,0 +1,850 @@
+//Firestore rules as at 02/September/2026 @ 13:01. File created by Benedict Mahlangu
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =====================================================
+    // 🔐 SHARED AUTHORIZATION FUNCTIONS
+    // =====================================================
+
+    /*
+      userAccess/{uid} is the canonical
+      authorization record.
+
+      /users remains the user/profile collection.
+    */
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function hasUserAccess() {
+      return signedIn() &&
+        exists(
+          /databases/$(database)/documents/userAccess/$(request.auth.uid)
+        );
+    }
+
+    function access() {
+      return get(
+        /databases/$(database)/documents/userAccess/$(request.auth.uid)
+      ).data;
+    }
+
+    function isApprovedUser() {
+      return hasUserAccess() &&
+        access().status == "approved";
+    }
+
+    function isTaskraft() {
+      return isApprovedUser() &&
+        access().userType == "taskraft";
+    }
+
+    function isSuperAdmin() {
+      return isTaskraft() &&
+        access().accessLevel == "superadmin";
+    }
+
+    // Taskraft payroll/accounting role
+    function isTaskraftAccountant() {
+      return isTaskraft() &&
+        access().accountRole == "accountant";
+    }
+
+    function isEdo() {
+      return isApprovedUser() &&
+        access().userType == "edo" &&
+        access().companyId != null;
+    }
+
+    function isOwnEdoCompany(companyId) {
+      return isEdo() &&
+        access().companyId == companyId;
+    }
+
+
+    // =====================================================
+    // 🔐 USERS
+    // =====================================================
+
+    match /users/{userId} {
+
+      allow get: if signedIn() &&
+        resource.data.uid == request.auth.uid;
+
+      allow list: if signedIn();
+
+      allow create: if signedIn() &&
+        request.resource.data.uid ==
+          request.auth.uid;
+
+      allow update: if signedIn();
+
+      allow delete: if signedIn() &&
+        request.auth.uid ==
+          "vUT0mXIMawUvYeS9ZsyUrYLw6gh1";
+    }
+
+
+    // =====================================================
+    // 🔐 INVOICES
+    // =====================================================
+
+    match /invoices/{invoiceId} {
+
+      allow read: if signedIn();
+
+      allow create: if signedIn() &&
+        request.resource.data.relieverUserId ==
+          request.auth.uid;
+
+      allow update: if signedIn() && (
+
+        (
+          request.auth.uid ==
+            resource.data.relieverUserId &&
+
+          resource.data.status ==
+            "pending" &&
+
+          request.resource.data
+            .diff(resource.data)
+            .changedKeys()
+            .hasOnly([
+              'date',
+              'reliefType',
+              'updatedAt'
+            ])
+        )
+
+        ||
+
+        (
+          request.resource.data
+            .diff(resource.data)
+            .changedKeys()
+            .hasOnly([
+              'status',
+              'approvedAt',
+              'approvedBy',
+              'rejectedAt',
+              'rejectedBy'
+            ])
+        )
+      );
+
+      allow delete: if signedIn() &&
+        request.auth.uid ==
+          resource.data.relieverUserId &&
+        resource.data.status ==
+          "pending";
+    }
+
+
+    // =====================================================
+    // 🌐 PUBLIC SIGNUP COMPANY DIRECTORY
+    // =====================================================
+
+    match /signupCompanies/{companyId} {
+
+      allow read: if true;
+
+      allow create, update, delete:
+        if isTaskraft() ||
+        (
+          signedIn() &&
+          request.auth.uid ==
+            "vUT0mXIMawUvYeS9ZsyUrYLw6gh1"
+        );
+    }
+
+
+    // =====================================================
+    // 🏢 COMPANIES
+    // =====================================================
+
+    match /companies/{docId} {
+
+      allow read: if signedIn();
+
+      allow create, update, delete:
+        if signedIn() &&
+        request.auth.uid in [
+          "vUT0mXIMawUvYeS9ZsyUrYLw6gh1",
+          "jpc6brxfYThHoEr7REhakY9VlXc2",
+          "gU8lBcD0zvdh9sy78K7N990pJTj1"
+        ];
+    }
+
+
+    // =====================================================
+    // 👤 RELIEVERS
+    // =====================================================
+
+    match /relievers/{docId} {
+
+      allow read: if signedIn();
+
+      allow create, update, delete:
+        if signedIn() &&
+        request.auth.uid in [
+          "vUT0mXIMawUvYeS9ZsyUrYLw6gh1",
+          "jpc6brxfYThHoEr7REhakY9VlXc2",
+          "gU8lBcD0zvdh9sy78K7N990pJTj1"
+        ];
+    }
+
+
+    // =====================================================
+    // 🚚 EDO
+    // =====================================================
+
+    match /edos/{docId} {
+
+      allow read: if signedIn();
+
+      allow create, update, delete:
+        if signedIn() &&
+        request.auth.uid in [
+          "vUT0mXIMawUvYeS9ZsyUrYLw6gh1",
+          "jpc6brxfYThHoEr7REhakY9VlXc2",
+          "gU8lBcD0zvdh9sy78K7N990pJTj1"
+        ];
+    }
+
+
+    // =====================================================
+    // 🛣 ROUTES
+    // =====================================================
+
+    match /routes/{docId} {
+
+      allow read: if signedIn();
+
+      allow create, update, delete:
+        if signedIn() &&
+        request.auth.uid in [
+          "vUT0mXIMawUvYeS9ZsyUrYLw6gh1",
+          "jpc6brxfYThHoEr7REhakY9VlXc2",
+          "gU8lBcD0zvdh9sy78K7N990pJTj1"
+        ];
+    }
+
+
+    // =====================================================
+    // 👥 EMPLOYEES
+    // =====================================================
+
+    match /employees/{employeeId} {
+
+      // TASKRAFT may read all employee records.
+      // EDO may read only employees belonging to its company.
+
+      allow get: if isTaskraft() ||
+        (
+          isEdo() &&
+          resource.data.edoId ==
+            access().companyId
+        );
+
+      allow list: if isTaskraft() ||
+        (
+          isEdo() &&
+          resource.data.edoId ==
+            access().companyId
+        );
+
+
+      // -----------------------------------------------------
+      // CREATE / DELETE
+      // Existing employee administration remains unchanged.
+      // -----------------------------------------------------
+
+      allow create, delete:
+        if signedIn() &&
+        request.auth.uid in [
+          "vUT0mXIMawUvYeS9ZsyUrYLw6gh1",
+          "jpc6brxfYThHoEr7REhakY9VlXc2",
+          "gU8lBcD0zvdh9sy78K7N990pJTj1"
+        ];
+
+
+      // -----------------------------------------------------
+      // UPDATE
+      // Existing admins retain normal employee update access.
+      //
+      // Taskraft Accountant may ONLY update the three
+      // Sage leave-balance fields created during payslip
+      // import.
+      // -----------------------------------------------------
+
+      allow update: if
+
+        (
+          signedIn() &&
+          request.auth.uid in [
+            "vUT0mXIMawUvYeS9ZsyUrYLw6gh1",
+            "jpc6brxfYThHoEr7REhakY9VlXc2",
+            "gU8lBcD0zvdh9sy78K7N990pJTj1"
+          ]
+        )
+
+        ||
+
+        (
+          isTaskraftAccountant() &&
+
+          request.resource.data
+            .diff(resource.data)
+            .changedKeys()
+            .hasOnly([
+              'sageAnnualLeaveBalance',
+              'sageLeaveBalancePeriod',
+              'sageLeaveBalanceUpdatedAt'
+            ])
+        );
+    }
+
+
+    // =====================================================
+    // 📅 ATTENDANCE EXCEPTIONS
+    // =====================================================
+
+    match /attendanceExceptions/{exceptionId} {
+
+      allow read: if signedIn();
+
+      allow create, update, delete:
+        if signedIn() &&
+        request.auth.uid in [
+          "vUT0mXIMawUvYeS9ZsyUrYLw6gh1",
+          "jpc6brxfYThHoEr7REhakY9VlXc2",
+          "gU8lBcD0zvdh9sy78K7N990pJTj1"
+        ];
+    }
+
+    // =====================================================
+// 🚫 EMPLOYEE SUSPENSIONS
+// =====================================================
+
+match /suspensions/{suspensionId} {
+
+  // Taskraft users may read suspension records.
+  //
+  // This is required for:
+  // - Suspension Register
+  // - Attendance integration
+  // - Attendance exports
+  //
+  // EDO users must NOT have access to disciplinary
+  // suspension records.
+
+  allow get, list:
+    if isTaskraft();
+
+
+  // Only Taskraft Admin / Superadmin may create,
+  // amend or cancel suspension records.
+
+  allow create, update:
+    if isTaskraft() &&
+    access().accessLevel in [
+      "admin",
+      "superadmin",
+      "super_admin"
+    ];
+
+
+  // Suspension history is an HR audit record.
+  // Never physically delete it.
+
+  allow delete: if false;
+}
+
+
+    // =====================================================
+    // 🕒 ATTENDANCE RECORDS
+    // =====================================================
+
+    match /attendanceRecords/{recordId} {
+
+      allow get: if isTaskraft() ||
+        (
+          isEdo() &&
+          resource.data.edoId ==
+            access().companyId
+        );
+
+      allow list: if isTaskraft() ||
+        (
+          isEdo() &&
+          resource.data.edoId ==
+            access().companyId
+        );
+
+
+      // CREATE
+
+      allow create: if isTaskraft() ||
+        (
+          isEdo() &&
+          request.resource.data.edoId ==
+            access().companyId
+        );
+
+
+      // UPDATE
+
+      allow update: if isTaskraft() ||
+        (
+          isEdo() &&
+
+          resource.data.edoId ==
+            access().companyId &&
+
+          request.resource.data.edoId ==
+            resource.data.edoId
+        );
+
+
+      // DELETE
+
+      allow delete: if isTaskraft() ||
+        (
+          isEdo() &&
+          resource.data.edoId ==
+            access().companyId
+        );
+    }
+
+
+    // =====================================================
+    // 🏖 LEAVE REQUESTS
+    // =====================================================
+
+    match /leaveRequests/{leaveRequestId} {
+
+      allow get: if isTaskraft() ||
+        (
+          isEdo() &&
+          resource.data.edoId ==
+            access().companyId
+        );
+
+      allow list: if isTaskraft() ||
+        (
+          isEdo() &&
+          resource.data.edoId ==
+            access().companyId
+        );
+
+
+      // CREATE
+
+      allow create: if
+        (
+          isTaskraft() &&
+          request.resource.data.status ==
+            "pending"
+        )
+
+        ||
+
+        (
+          isEdo() &&
+
+          request.resource.data.edoId ==
+            access().companyId &&
+
+          request.resource.data.status ==
+            "pending"
+        );
+
+
+      // UPDATE / APPROVAL
+
+      allow update: if
+        (
+          isTaskraft()
+
+          ||
+
+          (
+            isEdo() &&
+
+            resource.data.edoId ==
+              access().companyId &&
+
+            request.resource.data.edoId ==
+              resource.data.edoId
+          )
+        )
+
+        &&
+
+        request.resource.data
+          .diff(resource.data)
+          .changedKeys()
+          .hasOnly([
+            'status',
+            'approvedAt',
+            'approvedBy',
+            'approvedByName',
+            'rejectedAt',
+            'rejectedBy',
+            'rejectedByName',
+            'rejectionReason'
+          ]);
+
+
+      // Leave history remains auditable.
+
+      allow delete: if false;
+    }
+
+
+    // =====================================================
+    // 💰 PAYSLIPS
+    // =====================================================
+
+    match /payslips/{payslipId} {
+
+      /*
+        PAYSLIP IMPORT
+
+        Only approved Taskraft Accountant accounts
+        and Superadmin may currently access payroll
+        records.
+
+        Employee portal access will be added separately
+        through the staff API.
+      */
+
+      allow get, list:
+        if isTaskraftAccountant() ||
+           isSuperAdmin();
+
+
+      // CREATE
+      //
+      // Required identifying information must be stored.
+
+      allow create:
+        if
+          (
+            isTaskraftAccountant() ||
+            isSuperAdmin()
+          ) &&
+
+          request.resource.data.employeeId is string &&
+          request.resource.data.employeeCode is string &&
+          request.resource.data.idNumber is string &&
+          request.resource.data.companyId is string &&
+          request.resource.data.payPeriod is string &&
+          request.resource.data.ownerType == "employee";
+
+
+      // UPDATE
+      //
+      // Allows re-importing the same employee/month.
+      // Employee/company ownership cannot be changed.
+
+      allow update:
+        if
+          (
+            isTaskraftAccountant() ||
+            isSuperAdmin()
+          ) &&
+
+          request.resource.data.employeeId ==
+            resource.data.employeeId &&
+
+          request.resource.data.companyId ==
+            resource.data.companyId &&
+
+          request.resource.data.ownerType ==
+            resource.data.ownerType;
+
+
+      // Payroll history should not be deleted through
+      // the client application.
+
+      allow delete: if false;
+    }
+
+
+    // =====================================================
+    // 🛡 USER ACCESS
+    // =====================================================
+
+    match /userAccess/{userId} {
+
+      // -----------------------------------------------------
+      // READ
+      // -----------------------------------------------------
+
+      allow get: if signedIn() &&
+        (
+          request.auth.uid == userId ||
+          isSuperAdmin()
+        );
+
+      allow list: if isSuperAdmin();
+
+
+      // -----------------------------------------------------
+      // CREATE
+      // -----------------------------------------------------
+
+      allow create: if signedIn() &&
+        (
+
+          // SUPERADMIN
+
+          isSuperAdmin()
+
+          ||
+
+          // BOOTSTRAP SUPERADMIN
+
+          request.auth.uid ==
+            "vUT0mXIMawUvYeS9ZsyUrYLw6gh1"
+
+          ||
+
+          // NEW USER SELF-CREATION
+
+          (
+            request.auth.uid ==
+              userId &&
+
+            request.resource.data.uid ==
+              request.auth.uid &&
+
+            request.resource.data.status ==
+              "pending" &&
+
+            request.resource.data.accessLevel ==
+              "pending" &&
+
+            request.resource.data.userType in [
+              "taskraft",
+              "edo",
+              "reliever"
+            ]
+          )
+        );
+
+
+      // -----------------------------------------------------
+      // UPDATE
+      // -----------------------------------------------------
+
+      allow update: if signedIn() &&
+        (
+          isSuperAdmin()
+
+          ||
+
+          request.auth.uid ==
+            "vUT0mXIMawUvYeS9ZsyUrYLw6gh1"
+        );
+
+
+      // -----------------------------------------------------
+      // DELETE
+      // -----------------------------------------------------
+
+      allow delete: if false;
+    }
+
+    // =====================================================
+    // 💬 ADMIN MESSAGES
+    // =====================================================
+
+    match /adminMessages/{messageId} {
+
+      // Taskraft can read all admin messages.
+      allow read: if isTaskraft();
+
+      // EDO can read:
+      // 1. Messages sent to all EDOs
+      // 2. Messages specifically addressed to its companyId
+      allow read: if isEdo()
+        && (
+          resource.data.targetType == "all"
+          ||
+          (
+            resource.data.targetType == "selected"
+            && resource.data.targetEdoIds is list
+            && access().companyId in resource.data.targetEdoIds
+          )
+        );
+
+      // Messages are created through the secure
+      // server-side Admin Messages API.
+      allow create: if false;
+
+      // Message management remains server-side.
+      allow update, delete: if false;
+    }
+
+
+    // =====================================================
+    // 🔔 PUSH NOTIFICATION DEVICES
+    // =====================================================
+
+    match /pushDevices/{deviceId} {
+
+      // FCM device tokens are private.
+      // Registration and sending are handled by
+      // Firebase Admin on the server.
+      allow read, write: if false;
+    }
+
+      // =====================================================
+    // 📦 CRATE & DOLLY REPLACEMENT COSTS
+    // =====================================================
+
+    match /crateReplacementRates/{rateId} {
+    allow get, list: if isApprovedUser();
+
+    allow create: if isSuperAdmin()
+    && request.resource.data.crateCost is number
+    && request.resource.data.crateCost >= 0
+    && request.resource.data.dollyCost is number
+    && request.resource.data.dollyCost >= 0
+    && request.resource.data.effectiveFrom is string
+    && request.resource.data.createdBy == request.auth.uid;
+
+    allow update, delete: if false;
+    }
+
+    match /crateReconDaily/{reconId} {
+    allow get, list: if isTaskraft()
+    || (
+      isEdo()
+      && resource.data.edoId == access().companyId
+     );
+
+    allow create, update: if isTaskraft();
+    allow delete: if false;
+    }
+
+    
+    // =====================================================
+    // 🧾 CRATE & DOLLY SLIPS
+    // =====================================================
+
+    match /crateSlips/{slipId} {
+
+      // Taskraft sees all evidence.
+      //
+      // EDO sees evidence belonging to its own company.
+
+      allow get: if isTaskraft() ||
+        (
+          isEdo() &&
+          resource.data.edoId ==
+            access().companyId
+        );
+
+      allow list: if isTaskraft() ||
+        (
+          isEdo() &&
+          resource.data.edoId ==
+            access().companyId
+        );
+
+      /*
+        Driver / reliever submissions DO NOT write
+        directly from the browser to Firestore.
+
+        The staff portal API will:
+        1. authenticate the employee
+        2. obtain today's schedule
+        3. determine today's route
+        4. confirm the employee is allowed on that route
+        5. create the crate slip server-side
+
+        Therefore client-side creation remains blocked.
+      */
+
+      allow create: if false;
+
+      // Evidence is immutable from the client.
+      // Corrections/dispute actions must retain the
+      // original submission.
+
+      allow update, delete: if false;
+    }
+
+
+    // =====================================================
+    // 📅 DRIVER / RELIEVER ROUTE SCHEDULES
+    // =====================================================
+
+    match /routeSchedules/{scheduleId} {
+
+      // Taskraft manages the operational schedule.
+      allow get, list: if isTaskraft();
+
+      /*
+        EDO may view schedules belonging to its own
+        company.
+
+        EDO queries MUST contain:
+        where("edoId", "==", userAccess.companyId)
+      */
+
+      allow get: if isEdo() &&
+        resource.data.edoId ==
+          access().companyId;
+
+      allow list: if isEdo() &&
+        resource.data.edoId ==
+          access().companyId;
+
+      // Schedule maintenance remains Taskraft controlled.
+      allow create, update: if isTaskraft();
+
+      // Keep schedule history for audit purposes.
+      allow delete: if false;
+    }
+
+
+    // =====================================================
+    // ⚠️ CRATE RECON DISPUTES
+    // =====================================================
+
+    match /crateDisputes/{disputeId} {
+
+      // Taskraft sees all disputes.
+      // EDO sees only disputes for its own company.
+
+      allow get: if isTaskraft() ||
+        (
+          isEdo() &&
+          resource.data.edoId ==
+            access().companyId
+        );
+
+      allow list: if isTaskraft() ||
+        (
+          isEdo() &&
+          resource.data.edoId ==
+            access().companyId
+        );
+
+      // We will enable creation once the dispute
+      // workflow is built and its allowed fields
+      // are finalised.
+      allow create: if false;
+
+      allow update, delete: if false;
+    }
+  }
+}
