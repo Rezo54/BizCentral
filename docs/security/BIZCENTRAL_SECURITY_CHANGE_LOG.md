@@ -23,98 +23,73 @@ Companion documents:
 
 **Authorization source:** `userAccess/{uid}` only. The helper does not query `/users` and does not accept client-supplied role/company fields as authority.
 
-**Guards introduced:**
-- `requireAuthContext()`
-- `requireTaskraft()`
-- `requireAdmin()`
-- `requireSuperAdmin()`
-- `requireTaskraftAccountant()`
-- `requireEdo()`
-- `requireCompanyScope()`
-- `AuthorizationError` / `authorizationStatus()`
+**Guards introduced:** `requireAuthContext()`, `requireTaskraft()`, `requireAdmin()`, `requireSuperAdmin()`, `requireTaskraftAccountant()`, `requireEdo()`, `requireCompanyScope()`, `AuthorizationError` / `authorizationStatus()`.
 
-**Compatibility decisions:**
-- `super_admin` is temporarily recognized alongside canonical `superadmin` because legacy data/code still contains both forms. This alias will be removed only after authorization data is normalized.
-- `companyId` falls back to legacy `edoId` while migration is in progress.
-- Superadmin is accepted for accountant-only server operations where existing payroll rules already allow Superadmin.
+**Compatibility decisions:** `super_admin` is temporarily recognized alongside canonical `superadmin`; `companyId` falls back to legacy `edoId`; Superadmin is accepted for accountant-only server operations where existing payroll rules already allow Superadmin.
 
 **Runtime impact:** None intended. No existing API imports this helper yet. No UI code changed. No Firestore access path changed.
 
 **Firestore rules changed:** NO.
 
-**Netlify build:** skipped via commit message.
-
-**Tests/checks performed before commit:**
-- Re-read Security Migration Audit v1 and Rules Migration Matrix v1.
-- Re-read active `employee-portal` branch head before implementation.
-- Re-read `src/lib/firebase-admin.ts` to ensure helper reuses the existing named Admin app and `biz-central` Firestore database.
-- Compared helper design with the existing `/api/month-end` and `/api/admin/messages` authorization patterns.
-- Confirmed helper distinguishes missing/invalid authentication (401) from missing/unapproved/insufficient authorization (403).
-- Confirmed helper requires `userAccess.status == approved` centrally; this is stricter and more consistent than several existing duplicated API contexts, but it is not wired into them yet, so no current behaviour changes.
-- Confirmed no deployed rules file was modified.
+**Netlify build:** skipped.
 
 **Reviewed by:** Sol
 
-**Production approval:** Not applicable at this additive foundation stage; no production security/rules change.
+**Production approval:** Not applicable at this additive foundation stage.
 
 **Commit:** `aab4feb91e4e7ddcb8cbc55cd709138be2b9d91f`
 
 ---
 
-## 2026-09-02 13:11 SAST — Security Migration Step 1B
+## 2026-09-02 — Security Migration Step 1B
 
 **Branch:** `employee-portal`
 
-**Purpose:** Add a minimal canonical current-user/session endpoint backed by the Step 1A server authorization helper, without replacing any existing consumer.
+**Purpose:** Add and validate a minimal canonical current-user/session endpoint backed by the Step 1A server authorization helper, without replacing any existing consumer.
 
 **New file:** `src/app/api/session/route.ts`
 
+**Diagnostic file:** `src/app/(app)/admin/security-test/page.tsx`
+
 **Old path:** Browser `getCurrentUser()` consumers continue to obtain session/profile authority through the legacy `/users` path. Existing APIs continue using their current authorization implementations.
 
-**New path introduced:**
+**New path introduced:** `GET /api/session + Bearer Firebase ID token -> requireAuthContext() -> verified token -> approved userAccess/{uid} -> sanitized canonical user response`.
 
-`GET /api/session + Bearer Firebase ID token -> requireAuthContext() -> verified token -> approved userAccess/{uid} -> sanitized canonical user response`
-
-**Response intentionally exposes only current-user fields needed for later UI migration:**
-- `uid`
-- approved `status`
-- normalized `userType`
-- normalized `accessLevel`
-- `accountRole`
-- canonical/fallback `companyId`
-- display `name`
-- verified Firebase Auth `email`
+**Response fields:** `uid`, approved `status`, normalized `userType`, normalized `accessLevel`, `accountRole`, canonical/fallback `companyId`, display `name`, verified Firebase Auth `email`.
 
 The endpoint does not return the complete `userAccess` document and does not read `/users`.
 
-**Authorization behaviour:**
-- missing Bearer token -> 401;
-- invalid/expired Firebase token -> 401;
-- no `userAccess` record -> 403;
-- non-approved `userAccess` -> 403;
-- approved account -> 200 with canonical current-user data;
-- unexpected server failure -> 500 without leaking internal error details.
+**Authorization behaviour:** missing/invalid token -> 401; no userAccess/non-approved userAccess -> 403; approved account -> 200; unexpected server failure -> 500 without internal details.
 
-**Runtime impact:** None intended. No page, component, session helper or existing API has been switched to `/api/session` in Step 1B.
+**Runtime impact:** None intended. No existing consumer has been switched to `/api/session`.
 
 **Firestore rules changed:** NO.
 
-**Netlify build:** skipped via commit message.
+**Netlify build:** skipped.
 
-**Checks performed before implementation:**
-- Re-read Security Migration Audit v1.
-- Re-read Rules Migration Matrix v1.
-- Re-read Security Change Log and Step 1A checkpoint.
-- Re-read `src/lib/server-authorization.ts` from the active branch.
-- Confirmed the endpoint consumes the canonical helper rather than duplicating token/userAccess logic.
-- Confirmed it does not accept role/company/status from query parameters or request body.
-- Confirmed it is GET-only and does not mutate Firestore.
-- Confirmed no legacy consumer is removed or changed.
+### Live Employee Mod test results
 
-**Testing status:** Structural/code review completed. Live role tests require running Employee Mod with valid Firebase ID tokens for the test accounts. Before replacing `getCurrentUser()`, test at minimum: Taskraft superadmin/admin/standard, EDO A, EDO B, pending/rejected account, missing token and invalid token.
+| Test | Expected | Actual | Result |
+|---|---|---|---|
+| Taskraft Superadmin — Benedict Mahlangu | 200, approved, taskraft, superadmin | 200, approved, taskraft, superadmin; accountRole accountant; no company scope | PASS |
+| EDO — 2boysTest | 200, approved, edo, power_user, own companyId | 200, approved, edo, power_user, company `edo-2-boys-2-girls-pty-ltd` | PASS |
+| Unauthenticated direct GET `/api/session` | 401 Unauthorized | `{"ok":false,"error":"Unauthorized"}` | PASS |
+
+**Security conclusions from tests:**
+- The endpoint authenticates independently of page/UI visibility.
+- Effective role/type data is successfully resolved from canonical `userAccess` for both Taskraft and EDO account classes.
+- EDO company scope is correctly returned from canonical authorization data.
+- `accountRole` remains independent of `accessLevel`, as intended.
+- No Firestore rule was modified to make these tests pass.
+
+**Remaining negative tests before legacy session replacement:** missing userAccess, pending/rejected/removed userAccess, invalid/expired token. Additional positive role variants (Taskraft admin/standard and another EDO) should be exercised as accounts are available, but the two principal approved account classes are now proven.
 
 **Reviewed by:** Sol
 
-**Production approval:** Not applicable; additive endpoint only, no production rule or existing workflow change.
+**Production approval:** Not applicable; additive endpoint/test page only.
 
-**Next checkpoint:** Test `/api/session` locally in Employee Mod with representative accounts. Do not migrate legacy `getCurrentUser()` consumers until those positive/negative tests are recorded as passed.
+**Implementation commits:**
+- `eecbc7e89250247f4f1933158ccd06769da9258c` — canonical session endpoint.
+- `3f16c29c0afe55832fc91235aba888c18eaab947` — temporary canonical session test page.
+
+**Next checkpoint — Step 1C:** strengthen and complete the canonical session negative-test harness without altering live userAccess data, then record the results. Do not replace `getCurrentUser()` consumers until negative authorization behavior is proven.
