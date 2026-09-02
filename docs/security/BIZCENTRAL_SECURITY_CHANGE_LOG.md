@@ -121,14 +121,46 @@ A fresh disposable EDO signup was created through the normal Create Account flow
 
 ---
 
-## Step 5 opening — Employee Master
+## 2026-09-02 — Security Migration Step 5 — Employee Master
 
-Target from the migration audit:
-1. Add Taskraft employee create/update/bulk-import server APIs.
-2. Move privileged employee master writes away from direct browser Firestore mutation.
-3. Verify approved EDO cannot manually call Taskraft employee-master mutations.
-4. Preserve legitimate scoped employee reads and current EDO operational behavior.
-5. Tighten employee browser writes only after replacement paths and positive/negative tests pass.
+**Purpose:** Move privileged employee-master create, edit and bulk-import writes from browser Firestore mutations to canonical server-authorized APIs while preserving existing People workflows.
+
+**Implementation:**
+- Add Employee API: `src/app/api/admin/employees/route.ts`, commit `24f45cc`.
+- Add Employee UI migrated from direct `setDoc()` to authenticated API, commit `878534d`.
+- Edit Employee API: `src/app/api/admin/employees/[employeeId]/route.ts`, commit `f1a803e`.
+- Edit Employee UI migrated from direct `updateDoc()` to authenticated API, commit `4200a0d`.
+- Bulk Employee API: `src/app/api/admin/employees/bulk/route.ts`, commit `7e53531`.
+- Bulk Employee UI migrated from direct Firestore batch/write behaviour to authenticated API, commit `3a4f36d`.
+- Employee Master boundary tests added to temporary security diagnostic, commit `69d13bc`.
+
+**Server boundary:** all three mutation APIs require canonical approved `userAccess` and Taskraft Admin/Superadmin authorization before Admin SDK writes. Server independently owns employee ID generation, trusted company metadata, validation and audit timestamps. Add Employee duplicate prevention is authoritative server-side. Edit preserves employee code/company identity instead of trusting client-supplied scope. Bulk upload revalidates every row server-side and resolves EDO company metadata from Firestore.
+
+### Step 5 live validation
+
+| Test | Expected | Actual | Result |
+|---|---|---|---|
+| Taskraft Admin — Add Employee | Create through API | Temporary `SEC001` employee created | PASS |
+| Add duplicate employee code in same EDO | Server rejects duplicate | `Employee Code already exists for this EDO business` | PASS |
+| Taskraft Admin — Edit Employee | Update through API | `SEC001` successfully edited | PASS |
+| Taskraft Admin — Bulk Employee Upload | Existing master updates without duplicate creation | 237 processed; 0 created; 237 updated | PASS |
+| Approved EDO direct API attack — Create | 403, no employee created | 403 `Taskraft access required` | PASS |
+| Approved EDO direct API attack — Edit | 403, employee unchanged | 403 `Taskraft access required` | PASS |
+| Approved EDO direct API attack — Bulk | 403, no bulk employee created | 403 `Taskraft access required` | PASS |
+
+### Step 5 conclusion
+
+**STEP 5 APPLICATION/API MIGRATION PASSED.** The known privileged Employee Master write paths now use the canonical server authorization boundary and an authenticated EDO cannot bypass the UI to call those APIs.
+
+**Rules status:** Firestore rules remain unchanged by design. Employee rules are therefore **not yet finally hardened/closed**; collection-level browser-write denial is deferred to the rule-tightening gate after replacement-path verification. Final anomaly closure must also search the active branch for any additional employee mutation path not covered above.
+
+**Test fixture:** `SEC001` may be removed after it is no longer needed for security regression testing.
+
+---
+
+### Priority security work after Step 5 — C-001 Invoice Security
+
+C-001 remains **OPEN** because the invoice approval/rejection page still contains direct browser Firestore state mutation and the baseline invoice rules contain a permissive status/approval update branch. The next priority is to move invoice approval/rejection behind canonical server authorization, validate business-state transitions and ownership/scope, switch the UI, run direct-call negative tests, and then prepare the invoice-specific Firestore rule tightening gate.
 
 ---
 
