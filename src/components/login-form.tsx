@@ -10,8 +10,6 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
 import { getAuth, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from 'firebase/auth';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 
 const formSchema = z.object({
   email: z.string().email({ message: 'Invalid email address' }),
@@ -37,36 +35,38 @@ export function LoginForm() {
     try {
       const auth = getAuth();
       const userCred = await signInWithEmailAndPassword(auth, values.email, values.password);
-      const uid = userCred.user.uid;
+      const token = await userCred.user.getIdToken(true);
 
-      // Legacy profile lookup retained temporarily during the canonical-session migration.
-      // SECURITY: a Firebase-authenticated identity must not remain signed in when
-      // BizCentral application access is missing or not approved.
-      const q = query(collection(db, 'users'), where('uid', '==', uid));
-      const snap = await getDocs(q);
+      // Firebase Authentication proves identity. BizCentral application access is
+      // decided independently by the canonical server session backed by userAccess.
+      const response = await fetch('/api/session', {
+        method: 'GET',
+        cache: 'no-store',
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-      console.log('AUTH UID:', uid);
-      console.log('MATCHED USERS:', snap.docs.map((d) => d.data()));
-
-      if (snap.empty) {
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || body?.ok !== true || body?.user?.status !== 'approved') {
         await signOut(auth);
-        toast({
-          variant: 'destructive',
-          title: 'Account Not Found',
-          description: 'Please contact admin to complete setup.',
-        });
-        return;
-      }
 
-      const userData = snap.docs[0].data();
+        const serverMessage = String(body?.error ?? '').trim();
+        let title = 'Access Denied';
+        let description = serverMessage || 'Your BizCentral access is not approved.';
 
-      if (userData.status !== 'approved') {
-        await signOut(auth);
-        toast({
-          variant: 'destructive',
-          title: 'Access Pending',
-          description: 'Your account is awaiting approval.',
-        });
+        if (response.status === 403) {
+          if (/pending/i.test(serverMessage)) {
+            title = 'Access Pending';
+            description = 'Your account is awaiting approval.';
+          } else if (/rejected/i.test(serverMessage)) {
+            title = 'Access Rejected';
+            description = 'Your BizCentral access request has been rejected.';
+          } else if (/removed/i.test(serverMessage)) {
+            title = 'Access Removed';
+            description = 'Your BizCentral access has been removed.';
+          }
+        }
+
+        toast({ variant: 'destructive', title, description });
         return;
       }
 
@@ -127,8 +127,7 @@ export function LoginForm() {
           <FormField control={form.control} name="password" render={({ field }) => (
             <FormItem>
               <div className="flex items-center"><FormLabel>Password</FormLabel><button type="button" onClick={() => setShowReset(true)} className="ml-auto text-sm underline text-blue-600">Forgot your password?</button></div>
-              <FormControl><Input type="password" {...field} /></FormControl><FormMessage />
-            </FormItem>
+              <FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
           )} />
           <Button type="submit" className="w-full" disabled={isLoading}>{isLoading ? 'Logging in...' : 'Login'}</Button>
         </form>
