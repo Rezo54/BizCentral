@@ -39,65 +39,21 @@ Companion documents:
 | EDO — 2boysTest | 200, approved, edo, power_user, own companyId | 200, approved, edo, power_user, `edo-2-boys-2-girls-pty-ltd` | PASS |
 | Unauthenticated | 401 | 401 Unauthorized | PASS |
 
-**Implementation commits:** `eecbc7e89250247f4f1933158ccd06769da9258c`; `3f16c29c0afe55832fc91235aba888c18eaab947`.
-
 ---
 
 ## 2026-09-02 — Security Migration Step 1C / CONFIRMED CRITICAL FINDING C-001
 
 **Severity:** CRITICAL
 
-**Status:** PARTIALLY REMEDIATED / OPEN. The protected-app session bypass demonstrated below is fixed and tested. The underlying invoice direct-write/rules weakness remains open until the invoice API migration and relevant Firestore rule tightening are complete.
+**Status:** PARTIALLY REMEDIATED / OPEN. Protected-app session bypass is fixed and tested. Invoice direct-write/rules weakness remains open until invoice API migration and rule tightening.
 
-**Finding:** An authenticated Firebase user whose BizCentral account was still pending approval was able to manually navigate to the Reliever Invoice Approval page and successfully approve an invoice.
+**Finding:** A Firebase-authenticated pending BizCentral user was previously able to manually navigate to protected pages and approve an invoice through a direct browser Firestore mutation.
 
-**Observed exploit path:**
-1. A new test user was created normally and deliberately left unapproved.
-2. Correct credentials authenticated Firebase; legacy login displayed the pending message.
-3. The pending Firebase session remained authenticated.
-4. `/api/session` correctly rejected the identity with HTTP 403.
-5. The pending user could nevertheless manually open protected app pages, including Business Performance and Reliever Invoice Approval, because the shared protected layout still used legacy `getCurrentUser()` authority from `/users`.
-6. The invoice approval page then performed a direct Firestore `updateDoc()` and the unauthorized approval succeeded.
-7. Benedict Mahlangu manually restored the affected test invoice to its intended unapproved/pending business state after the test. The security evidence remains recorded.
+**Root causes recorded:** legacy `/users` authorization, pending Firebase session retention, shared layout trusting legacy session, direct invoice browser write, permissive invoice rule.
 
-**Confirmed root causes:**
-- authentication and application authorization were conflated in legacy browser paths;
-- failed/pending application login could leave Firebase identity signed in;
-- legacy `getCurrentUser()` read `/users` without enforcing approved canonical `userAccess.status`;
-- the shared `(app)` layout trusted that legacy helper;
-- invoice approval is still a direct browser Firestore mutation;
-- the baseline invoice rule permits an approval/status-field mutation without sufficiently restricting the actor.
+**Key remediation commits:** `1fac56e5669bcb312768fb988b23e8c40503308f`; `6afa76e5187d43e468da9283666ffa8edcae7a3c`; login canonicalization `4868158fab7b7e3c33562e7c9f2f0484b96be1cb`; initialized Auth regression fix `926ad5e14291d25072c53ba4832d32e371176728`.
 
-### Step 1C defensive changes
-
-**Commit `1fac56e5669bcb312768fb988b23e8c40503308f` — `Sign out unauthorized login sessions [skip netlify]`:**
-- login now calls Firebase `signOut(auth)` when the legacy profile is missing or status is not approved;
-- classified as defense-in-depth only, not sufficient authorization by itself.
-
-The first retest after this login-only change still demonstrated protected-page access. This proved that fixing only the login UI was insufficient and that the common protected application session boundary also had to migrate.
-
-**Commit `6afa76e5187d43e468da9283666ffa8edcae7a3c` — `Use canonical API for current session [skip netlify]`:**
-- `src/lib/session.ts` no longer queries `/users` to determine the current protected-app authority;
-- it obtains the Firebase ID token and calls `/api/session`;
-- `/api/session` resolves effective authorization from approved `userAccess/{uid}`;
-- a 401/403 response returns no application session and signs out the Firebase browser identity as defense-in-depth;
-- existing `getCurrentUser()` consumers therefore begin using the canonical authorization source without a global UI rewrite.
-
-### Step 1C negative and regression test evidence
-
-| Test | Expected | Actual | Result |
-|---|---|---|---|
-| Missing Authorization token | 401 | 401 Unauthorized | PASS |
-| Malformed Bearer token | 401 | 401 Unauthorized | PASS |
-| Wrong Authorization scheme | 401 | 401 Unauthorized | PASS |
-| Valid Firebase identity with pending BizCentral access | 403 from canonical API / no protected application access | Canonical API rejected; after session migration pending account has no access to protected pages | PASS |
-| Pending account manually opens `/business-performance` | Page must not render | No access | PASS |
-| Pending account manually opens `/invoicing/reliever/approve` | Page must not render | No access | PASS |
-| Approved account normal login | Must retain correct authorized application view | Login succeeds with correct view | PASS |
-
-**Step 1C conclusion:** Canonical approved-status enforcement is now proven at the shared protected-app session boundary. Pending Firebase identities can no longer use the tested manual-URL path to enter BizCentral protected pages. This does NOT close C-001 completely because direct invoice business-state mutation and permissive invoice Firestore rules remain to be migrated and tightened.
-
-**Remaining session-edge tests:** naturally available rejected/removed account and valid Firebase identity with missing `userAccess` should be tested when safe fixtures/accounts are available. Do not damage approved production accounts merely to create these cases.
+**Validated:** pending canonical 403; pending manual Business Performance denied; pending manual Invoice Approval denied; approved accounts retain correct view.
 
 **Firestore rules changed:** NO.
 
@@ -105,43 +61,81 @@ The first retest after this login-only change still demonstrated protected-page 
 
 ## 2026-09-02 — Security Migration Step 3 — User Administration API
 
-**Purpose:** Move user listing and lifecycle decisions away from direct browser Firestore writes and behind canonical server authorization.
+**Purpose:** Move user listing, lifecycle decisions and userAccess repair away from direct browser Firestore writes and behind canonical server authorization.
 
 **Implementation:**
-- `src/app/api/admin/users/route.ts` added in commit `4266f465af4ec02e9cf64c191a746a291cc08b71`.
-- Approval role validation hardened server-side in commit `84c4791aa82f9680958848d58928a7db999c4df8`.
-- `src/app/(app)/admin/users/page.tsx` switched from direct Firestore reads/writes to the server API in commit `0388fc5535ef1ffcc06109fc8bfd99413164db7f`.
-- The API requires canonical approved Superadmin authorization before listing users or processing lifecycle decisions.
-- Effective `userType` and `accessLevel` are derived server-side from a finite approved role set. The browser cannot submit arbitrary effective authorization fields.
-- Approval updates `/users` and `/userAccess` together through Admin SDK; rejection disables canonical access while retaining the authorization record; removal marks canonical access removed before deleting the profile.
-- Superadmin self-removal and removal of a Superadmin target through this action are denied server-side.
+- User administration API: `4266f465af4ec02e9cf64c191a746a291cc08b71`.
+- Server approval role validation: `84c4791aa82f9680958848d58928a7db999c4df8`.
+- User Approvals UI moved to API: `0388fc5535ef1ffcc06109fc8bfd99413164db7f`.
+- Server userAccess sync API: `84bad650681ae99a071699d8f386cb9ace59aae2`.
+- Sync UI moved to server API: `9caa97fdeaddc985d542563553a64e2eb0e79e2e`.
+- Effective `userType` and `accessLevel` are derived server-side; browser cannot grant arbitrary effective authorization.
+- Superadmin self-removal and Superadmin-target removal through the lifecycle action are denied server-side.
 
-### Step 3 authorization-boundary tests
+### Authorization boundary tests
 
-| Test | Expected | Actual | Result |
-|---|---|---|---|
-| User Admin GET — missing token | 401 | 401 Unauthorized | PASS |
-| User Admin GET — malformed token | 401 | 401 Unauthorized | PASS |
-| User Admin GET — Benedict/Superadmin | 200 | 200 Authorized | PASS |
-| User Admin malformed PATCH — Benedict/Superadmin | 400 after authorization, no write | 400 Invalid user decision request | PASS |
-| User Admin GET — approved EDO | 403 | 403 Taskraft access required | PASS |
-| User Admin PATCH — approved EDO | 403 before validation/write | 403 Taskraft access required | PASS |
+| Test | Actual | Result |
+|---|---|---|
+| GET missing token | 401 Unauthorized | PASS |
+| GET malformed token | 401 Unauthorized | PASS |
+| GET Benedict/Superadmin | 200 Authorized | PASS |
+| malformed PATCH Benedict/Superadmin | 400 after authorization, no write | PASS |
+| GET approved EDO | 403 Taskraft access required | PASS |
+| PATCH approved EDO | 403 Taskraft access required before write | PASS |
 
-### Step 3 real approval lifecycle test
+### Approval lifecycle
 
-A disposable test user previously used for the C-001 pending-account test was approved through the new server API as an EDO associated with **2boys 2 girls**.
+Disposable test user approved as EDO associated with **2boys 2 girls** through the API-backed User Approvals page. Login succeeded; correct EDO view/company was received; manual `/admin/users` access was denied — PASS.
 
-Observed results:
-1. Pending test user appeared normally on the Superadmin User Approvals page through the API-backed listing — PASS.
-2. Benedict approved the user as EDO through the API-backed page — PASS.
-3. The test account subsequently logged in successfully instead of receiving Access Pending — PASS.
-4. The test account received the correct EDO application view — PASS.
-5. The EDO association resolved to the intended 2boys 2 girls company — PASS.
-6. The approved EDO could not manually access `/admin/users` — PASS.
+### userAccess sync repair
 
-**Current Step 3 status:** POSITIVE APPROVAL PATH VALIDATED. Reject/remove lifecycle paths and legacy sync-page retirement remain to be completed before Step 3 is closed.
+Benedict ran the API-backed User Access Sync after migration:
+- Users Found: **92**
+- Synced: **92**
+- Skipped: **0**
+- Errors: **0**
 
-**Firestore rules changed:** NO. Existing production rules remain at baseline while replacement paths are validated.
+Result: PASS. Browser no longer performs the repair writes.
+
+### Remove lifecycle
+
+The disposable approved EDO was removed through the API-backed User Approvals page. The removed account could not subsequently enter BizCentral. However, its later login attempt failed at Firebase Authentication with invalid credentials before `/api/session` could inspect `userAccess.status=removed`. Therefore:
+- server removal action: PASS;
+- application access after removal: DENIED / PASS security outcome;
+- specific `removed -> canonical /api/session 403` evidence: **NOT YET PROVEN** with this fixture.
+
+Do not misclassify this as a canonical removed-status test. A controlled fixture with valid Firebase credentials must be used later if explicit removed-status 403 evidence is required.
+
+### Reject lifecycle
+
+A fresh disposable pending signup was rejected through the API-backed User Approvals page.
+- Firebase identity remained valid and reached canonical application authorization.
+- Login displayed **Access Rejected — Your BizCentral access request has been rejected.**
+- Manual `/dashboard` access after rejection was blocked.
+- Manual `/admin/users` access after rejection was blocked.
+
+Result: PASS. This proves the canonical rejected-status boundary independently of Firebase Authentication.
+
+### Step 3 conclusion
+
+**Step 3 user administration migration is functionally complete for listing, approval, rejection, removal and userAccess repair.** Positive approval, insufficient-role denial, rejection denial, sync repair and approved-user regression paths have been validated.
+
+**Outstanding evidence item:** explicit valid-Firebase-identity `userAccess.status=removed -> /api/session 403` remains on the security test backlog and final anomaly-closure gate. It does not block progression to Step 4 because removed application access was denied, but it must not be silently treated as tested.
+
+**Firestore rules changed:** NO. Baseline rules remain unchanged pending later collection-by-collection tightening after replacement paths are validated.
+
+---
+
+## Step 4 opening audit — Signup authority
+
+Current signup remains a legacy/high-risk migration target. The browser currently:
+- creates the Firebase Authentication identity;
+- writes `/users` directly;
+- writes `/userAccess/{uid}` directly;
+- stores requested/effective-looking access fields in the profile;
+- currently derives `requestedAccessLevel` in the browser (`standard`, EDO `power_user`, Taskraft `admin`), even though the created canonical `userAccess.accessLevel` is initially `pending`.
+
+Step 4 target: signup creates identity plus a pending request/profile only; no browser code may assign effective authorization. Canonical effective authorization remains exclusively an approval-time server decision.
 
 ---
 
@@ -161,8 +155,8 @@ Completion requires all of the following:
 9. Run regression tests for approved users so hardening does not break legitimate workflows.
 10. Produce a final closure report listing every discovered anomaly, remediation commit, rule change, test evidence and final disposition.
 
-**Definition of done:** There must be no known unexplained authorization anomaly remaining at final security sign-off. A working UI is not evidence of security; the server/API and final rules must enforce the intended authorization independently.
+**Definition of done:** There must be no known unexplained authorization anomaly remaining at final security sign-off.
 
 **Reviewed by:** Sol
 
-**Owner requirement:** Benedict Mahlangu explicitly required that this Critical finding be noted and that all anomalies discovered during the upgrade be removed/resolved by the end of the security upgrade.
+**Owner requirement:** Benedict Mahlangu explicitly required that all anomalies discovered during the upgrade be removed/resolved by the end of the security upgrade.
