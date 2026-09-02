@@ -7,6 +7,7 @@ import {
 } from '@/lib/server-authorization';
 
 type Decision = 'approve' | 'reject' | 'remove';
+const APPROVABLE_ROLES = new Set(['client_employee', 'client', 'admin_user', 'supervisor', 'supplier']);
 
 function normalized(value: unknown): string {
   return String(value ?? '').trim().toLowerCase();
@@ -27,12 +28,7 @@ function mapAccessLevel(role: string): string {
 
 function errorResponse(error: unknown) {
   const status = authorizationStatus(error);
-  if (status) {
-    return Response.json(
-      { ok: false, error: error instanceof Error ? error.message : 'Forbidden' },
-      { status }
-    );
-  }
+  if (status) return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Forbidden' }, { status });
   console.error('User administration API failed:', error);
   return Response.json({ ok: false, error: 'User administration failed' }, { status: 500 });
 }
@@ -61,15 +57,11 @@ export async function PATCH(request: Request) {
 
     const userRef = context.db.collection('users').doc(userId);
     const userSnap = await userRef.get();
-    if (!userSnap.exists) {
-      return Response.json({ ok: false, error: 'User not found' }, { status: 404 });
-    }
+    if (!userSnap.exists) return Response.json({ ok: false, error: 'User not found' }, { status: 404 });
 
     const user = userSnap.data() ?? {};
     const targetUid = String(user.uid ?? '').trim();
-    if (!targetUid) {
-      return Response.json({ ok: false, error: 'User has no Firebase Authentication UID' }, { status: 409 });
-    }
+    if (!targetUid) return Response.json({ ok: false, error: 'User has no Firebase Authentication UID' }, { status: 409 });
 
     if (decision === 'remove' && targetUid === context.uid) {
       throw new AuthorizationError('You cannot remove your own superadmin access', 403);
@@ -79,7 +71,6 @@ export async function PATCH(request: Request) {
     const targetAccessSnap = await accessRef.get();
     const targetAccess = targetAccessSnap.data() ?? {};
     const targetAccessLevel = normalized(targetAccess.accessLevel ?? targetAccess.role ?? user.accessLevel ?? user.role);
-
     if (decision === 'remove' && ['superadmin', 'super_admin'].includes(targetAccessLevel)) {
       throw new AuthorizationError('A superadmin account cannot be removed through this action', 403);
     }
@@ -92,15 +83,15 @@ export async function PATCH(request: Request) {
     };
 
     if (decision === 'approve') {
-      const role = normalized(user.role);
-      if (!role) return Response.json({ ok: false, error: 'Assign a role before approval' }, { status: 400 });
+      // The UI may propose one of the finite business roles, but it never supplies
+      // effective userType/accessLevel. Those are derived here on the server.
+      const role = normalized(body?.role ?? user.role);
+      if (!APPROVABLE_ROLES.has(role)) {
+        return Response.json({ ok: false, error: 'Assign a valid role before approval' }, { status: 400 });
+      }
 
       const userType = mapUserType(role);
       const accessLevel = mapAccessLevel(role);
-      if (userType === 'unknown') {
-        return Response.json({ ok: false, error: 'Unable to determine user type from role' }, { status: 400 });
-      }
-
       if (userType === 'edo' && !String(user.companyId ?? '').trim()) {
         return Response.json({ ok: false, error: 'EDO user requires a companyId before approval' }, { status: 400 });
       }
