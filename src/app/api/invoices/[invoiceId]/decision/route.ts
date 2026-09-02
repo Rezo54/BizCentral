@@ -25,13 +25,9 @@ export async function PATCH(
       return Response.json({ ok: false, error: 'Decision must be approve or reject' }, { status: 400 });
     }
 
-    // Business rule retained from the existing approval UI:
-    // - the EDO responsible for the invoice may approve/reject its own invoice;
-    // - Taskraft Superadmin may approve/reject any invoice;
-    // - relievers and other Taskraft roles may not perform the decision.
-    const isSuperAdmin = context.userType === 'taskraft' && context.accessLevel === 'superadmin';
+    const isSuperAdmin = context.userType === 'taskraft' && ['superadmin', 'super_admin'].includes(context.accessLevel);
     const isEdo = context.userType === 'edo';
-    if (!isSuperAdmin && !isEdo) throw new AuthorizationError(403, 'Invoice approval access required');
+    if (!isSuperAdmin && !isEdo) throw new AuthorizationError('Invoice approval access required', 403);
 
     const invoiceRef = context.db.collection('invoices').doc(id);
     await context.db.runTransaction(async (transaction) => {
@@ -40,13 +36,14 @@ export async function PATCH(
       const invoice = snap.data() ?? {};
 
       if (isEdo && clean(invoice.edoId) !== clean(context.companyId)) {
-        throw new AuthorizationError(403, 'Invoice belongs to another EDO');
+        throw new AuthorizationError('Invoice belongs to another EDO', 403);
       }
       if (clean(invoice.status).toLowerCase() !== 'pending') {
         throw new Error('INVALID_INVOICE_STATE');
       }
 
-      const actorName = context.name || context.email || context.uid;
+      // Canonical display name comes from the trusted userAccess record. Never trust a client-supplied approver name.
+      const actorName = clean(context.access.name) || clean(context.token.name) || clean(context.token.email) || context.uid;
       if (decision === 'approve') {
         transaction.update(invoiceRef, {
           status: 'approved',
