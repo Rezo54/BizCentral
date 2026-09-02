@@ -1,9 +1,7 @@
-import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
 
-export type AccessLevel = "standard" | "power_user" | "admin" | "superadmin";
-export type UserType = "reliever" | "edo" | "taskraft";
+export type AccessLevel = 'standard' | 'power_user' | 'admin' | 'superadmin';
+export type UserType = 'reliever' | 'edo' | 'taskraft';
 
 export type SessionUser = {
   uid: string;
@@ -17,6 +15,26 @@ export type SessionUser = {
   relieverId?: string;
 };
 
+type CanonicalSessionResponse = {
+  ok?: boolean;
+  user?: {
+    uid?: string;
+    name?: string | null;
+    email?: string | null;
+    userType?: string;
+    accessLevel?: string;
+    accountRole?: string | null;
+    companyId?: string | null;
+  };
+};
+
+/**
+ * Canonical browser session reader.
+ *
+ * Firebase Authentication establishes identity. Effective BizCentral access is
+ * then resolved by /api/session from approved userAccess/{uid}. The browser no
+ * longer reads /users to decide whether a protected app session is authorized.
+ */
 export async function getCurrentUser(): Promise<SessionUser | null> {
   const auth = getAuth();
 
@@ -29,30 +47,44 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
         return;
       }
 
-      const q = query(
-        collection(db, "users"),
-        where("uid", "==", firebaseUser.uid)
-      );
+      try {
+        const token = await firebaseUser.getIdToken();
+        const response = await fetch('/api/session', {
+          method: 'GET',
+          cache: 'no-store',
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
-      const snap = await getDocs(q);
+        if (!response.ok) {
+          // Defense in depth: a Firebase identity rejected by canonical
+          // application authorization must not retain a browser session.
+          if (response.status === 401 || response.status === 403) {
+            await signOut(auth);
+          }
+          resolve(null);
+          return;
+        }
 
-      if (snap.empty) {
+        const body = (await response.json()) as CanonicalSessionResponse;
+        const user = body.user;
+        if (!body.ok || !user?.uid || !user.userType || !user.accessLevel) {
+          resolve(null);
+          return;
+        }
+
+        resolve({
+          uid: user.uid,
+          name: String(user.name ?? '').trim(),
+          email: String(user.email ?? firebaseUser.email ?? '').trim(),
+          userType: user.userType as UserType,
+          accessLevel: user.accessLevel as AccessLevel,
+          accountRole: String(user.accountRole ?? '').trim().toLowerCase(),
+          companyId: user.companyId ? String(user.companyId) : undefined,
+        });
+      } catch (error) {
+        console.error('Unable to load canonical session:', error);
         resolve(null);
-        return;
       }
-
-      const data = snap.docs[0].data();
-
-      resolve({
-        uid: data.uid,
-        name: data.name,
-        email: data.email,
-        userType: data.userType,
-        accessLevel: data.accessLevel,
-        accountRole: String(data.accountRole || "").trim().toLowerCase(),
-        companyId: data.companyId,
-        relieverId: data.relieverId,
-      });
     });
   });
 }
