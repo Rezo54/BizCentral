@@ -98,19 +98,11 @@ export default function SecuritySessionTestPage() {
           `Bearer ${token}`,
           200
         );
-        // This button is intended to be run once as superadmin and again while
-        // signed in as an approved non-superadmin test account. A 403 is also a
-        // valid boundary result and is displayed as PASS.
         currentResult.passed = currentResult.httpStatus === 200 || currentResult.httpStatus === 403;
         tests.push(currentResult);
-      }
 
-      // Deliberately malformed PATCH request. If the caller is not superadmin,
-      // authorization must fail before request validation. If the caller is
-      // superadmin, 400 proves the request reached validation without writing.
-      const current = auth.currentUser;
-      if (current) {
-        const token = await current.getIdToken(true);
+        // Deliberately malformed PATCH request. Reuse the same authenticated
+        // identity/token so no second block-scoped declaration is required.
         const patchResult = await requestJson(
           'User Admin — non-mutating PATCH boundary',
           'Superadmin: HTTP 400 invalid request. Non-superadmin: HTTP 403. No Firestore write.',
