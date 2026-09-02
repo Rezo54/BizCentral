@@ -9,7 +9,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
-import { getAuth, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from 'firebase/auth';
+import { signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
 const formSchema = z.object({
   email: z.string().email({ message: 'Invalid email address' }),
@@ -33,12 +34,9 @@ export function LoginForm() {
     setIsLoading(true);
 
     try {
-      const auth = getAuth();
       const userCred = await signInWithEmailAndPassword(auth, values.email, values.password);
       const token = await userCred.user.getIdToken(true);
 
-      // Firebase Authentication proves identity. BizCentral application access is
-      // decided independently by the canonical server session backed by userAccess.
       const response = await fetch('/api/session', {
         method: 'GET',
         cache: 'no-store',
@@ -88,12 +86,13 @@ export function LoginForm() {
     const code = error.code || '';
     switch (code) {
       case 'auth/user-not-found': return 'No account found with this email.';
-      case 'auth/invalid-credential': return 'Invalid credentials. Please try again.';
+      case 'auth/invalid-credential': return 'Invalid email or password. Please check your details and try again.';
       case 'auth/wrong-password': return 'Incorrect password.';
       case 'auth/invalid-email': return 'Invalid email address.';
       case 'auth/too-many-requests': return 'Too many attempts. Try again later.';
       case 'auth/network-request-failed': return 'Network error. Check your connection.';
-      default: return 'Something went wrong. Please try again.';
+      case 'auth/no-app': return 'Login service is not initialized. Please refresh the page and try again.';
+      default: return 'Unable to sign in. Please refresh the page and try again.';
     }
   }
 
@@ -105,7 +104,6 @@ export function LoginForm() {
 
     try {
       setResetLoading(true);
-      const auth = getAuth();
       await sendPasswordResetEmail(auth, resetEmail);
       toast({ title: 'Reset Email Sent', description: 'Check your inbox to reset your password.' });
       setShowReset(false);
