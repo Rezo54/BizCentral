@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -60,47 +60,47 @@ export default function RelieverSummaryPage() {
 
   const router = useRouter();
 
-  
+
 
   // -----------------------------
   // LOAD DATA
   // -----------------------------
   useEffect(() => {
-  async function loadData() {
-    const u = await getCurrentUser();
-    setUser(u);
+    async function loadData() {
+      const u = await getCurrentUser();
+      setUser(u);
 
-    // 🔥 FIX: set edoFilter using correct field
-    if (u?.userType === "edo") {
-      setEdoFilter(u.companyId || u.edoId || ""); 
-    }
-
-    let data: any[] = [];
-
-    if (u) {
-      if (u.userType === "reliever") {
-        data = await listInvoicesForRelieverCompany(u.relieverId || "");
-      } else if (u.userType === "edo") {
-        data = await listInvoicesForEdo(u.companyId || u.edoId || "");
-      } else {
-        data = await listAllRelieverInvoices();
+      // ðŸ”¥ FIX: set edoFilter using correct field
+      if (u?.userType === "edo") {
+        setEdoFilter(u.companyId || u.edoId || "");
       }
+
+      let data: any[] = [];
+
+      if (u) {
+        if (u.userType === "reliever") {
+          data = await listInvoicesForRelieverCompany(u.relieverId || "");
+        } else if (u.userType === "edo") {
+          data = await listInvoicesForEdo(u.companyId || u.edoId || "");
+        } else {
+          data = await listAllRelieverInvoices();
+        }
+      }
+
+      const cleanedData = data.map((r) => ({
+        ...r,
+        amount:
+          typeof r.amount === "string"
+            ? Number(r.amount.replace(/[^0-9.-]+/g, ""))
+            : r.amount,
+      }));
+
+      setSource(cleanedData);
+      setLoading(false);
     }
 
-    const cleanedData = data.map((r) => ({
-      ...r,
-      amount:
-        typeof r.amount === "string"
-          ? Number(r.amount.replace(/[^0-9.-]+/g, ""))
-          : r.amount,
-    }));
-
-    setSource(cleanedData);
-    setLoading(false);
-  }
-
-  loadData();
-}, []);
+    loadData();
+  }, []);
 
   // -----------------------------
   // ROLE FLAGS
@@ -115,56 +115,56 @@ export default function RelieverSummaryPage() {
   // MEMOS (FIXED POSITION)
   // -----------------------------
   const edoOptions = useMemo(() => {
-  const map = new Map<string, string>();
+    const map = new Map<string, string>();
 
-  source.forEach((r) => {
-    map.set(r.edoId, r.edoName);
-  });
+    source.forEach((r) => {
+      map.set(r.edoId, r.edoName);
+    });
 
-  return Array.from(map.entries()); // [id, name]
+    return Array.from(map.entries()); // [id, name]
   }, [source]);
 
   const supplierOptions = useMemo(() => {
     return Array.from(new Set(source.map((r) => r.relieverCompanyId))).sort();
   }, [source]);
 
- const filtered = useMemo(() => {
-  return source.filter((r) => {
+  const filtered = useMemo(() => {
+    return source.filter((r) => {
 
-    // 🔒 EDO restriction (PRIMARY)
-    if (user?.userType === "edo") {
-      if (r.edoId !== user.companyId) return false;
-    }
+      // ðŸ”’ EDO restriction (PRIMARY)
+      if (user?.userType === "edo") {
+        if (r.edoId !== user.companyId) return false;
+      }
 
-    // 🔒 Reliever restriction
-    if (user?.userType === "reliever") {
-    if (r.relieverCompanyId !== user.relieverId) return false;
-    }
+      // ðŸ”’ Reliever restriction
+      if (user?.userType === "reliever") {
+        if (r.relieverCompanyId !== user.relieverId) return false;
+      }
 
-    // Existing filters
-    if (from && r.date < from) return false;
-    if (to && r.date > to) return false;
-    if (edoFilter !== "all" && r.edoId !== edoFilter) return false;
-    if (supplierFilter !== "all" && r.relieverCompanyId !== supplierFilter) return false;
+      // Existing filters
+      if (from && r.date < from) return false;
+      if (to && r.date > to) return false;
+      if (edoFilter !== "all" && r.edoId !== edoFilter) return false;
+      if (supplierFilter !== "all" && r.relieverCompanyId !== supplierFilter) return false;
 
-    // Status filter
-    if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      // Status filter
+      if (statusFilter !== "all" && r.status !== statusFilter) return false;
 
-    // Relief type filter
-    if (reliefTypeFilter !== "all" && r.reliefType !== reliefTypeFilter) return false;
+      // Relief type filter
+      if (reliefTypeFilter !== "all" && r.reliefType !== reliefTypeFilter) return false;
 
-    return true;
-  });
-}, [
-  source,
-  from,
-  to,
-  edoFilter,
-  supplierFilter,
-  statusFilter,
-  reliefTypeFilter,
-  user // ✅ IMPORTANT (don’t forget this)
-]);
+      return true;
+    });
+  }, [
+    source,
+    from,
+    to,
+    edoFilter,
+    supplierFilter,
+    statusFilter,
+    reliefTypeFilter,
+    user // âœ… IMPORTANT (donâ€™t forget this)
+  ]);
 
   const pendingRows = filtered.filter((r) => r.status === "pending");
   const approvedRows = filtered.filter((r) => r.status === "approved");
@@ -214,24 +214,24 @@ export default function RelieverSummaryPage() {
 
 
 
-function exportExcel() {
-  const data = filtered.map((r) => ({
-    Date: r.date,
-    "Reliever ID": r.relieverCompanyId,
-    "EDO Name": r.edoName,
-    Route: r.routeCode,
-    "Relief Type": labelType(r.reliefType),
-    Amount: r.amount, // keep numeric
-    Status: r.status,
-  }));
+  function exportExcel() {
+    const data = filtered.map((r) => ({
+      Date: r.date,
+      "Reliever ID": r.relieverCompanyId,
+      "EDO Name": r.edoName,
+      Route: r.routeCode,
+      "Relief Type": labelType(r.reliefType),
+      Amount: r.amount, // keep numeric
+      Status: r.status,
+    }));
 
-  const worksheet = XLSX.utils.json_to_sheet(data);
+    const worksheet = XLSX.utils.json_to_sheet(data);
 
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Summary");
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Summary");
 
-  XLSX.writeFile(workbook, "reliever-summary.xlsx");
-}
+    XLSX.writeFile(workbook, "reliever-summary.xlsx");
+  }
 
   function printPage() {
     window.print();
@@ -324,6 +324,11 @@ function exportExcel() {
       `}</style>
 
       <div className="no-print space-y-6">
+        <div>
+          <Button variant="ghost" onClick={() => router.push("/invoicing/reliever/approve")} className="h-auto px-0 hover:bg-transparent">
+            ← Back to Reliever Invoice Approval
+          </Button>
+        </div>
         <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="text-2xl md:text-3xl font-semibold">Invoice Summary</h1>
@@ -337,13 +342,13 @@ function exportExcel() {
                 onClick={() => router.push("/invoicing/reliever")}
                 className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm"
               >
-                ← Back to Invoice Page
+                â† Back to Invoice Page
               </button>
               </div>  */}
 
-              <h1 className="text-xl font-semibold">Summary</h1> 
+            <h1 className="text-xl font-semibold">Summary</h1>
 
-                       
+
           </div>
 
           <div className="flex gap-2">
@@ -361,7 +366,7 @@ function exportExcel() {
             <CardTitle className="text-base">Filters</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-6 items-end">
-           <div>
+            <div>
               <label className="block text-xs mb-1">From</label>
               <Input
                 type="date"
@@ -375,23 +380,23 @@ function exportExcel() {
               <label className="block text-xs mb-1">To</label>
               <Input
                 type="date"
-                value={to} // ✅ FIXED
+                value={to} // âœ… FIXED
                 max={new Date().toISOString().split("T")[0]}
-                onChange={(e) => setTo(e.target.value)} // ✅ FIXED
+                onChange={(e) => setTo(e.target.value)} // âœ… FIXED
               />
             </div>
 
             <div>
               <label className="block text-xs mb-1">EDO</label>
               <select
-               value={edoFilter}
+                value={edoFilter}
                 onChange={(e) => setEdoFilter(e.target.value)}
                 disabled={user?.userType === "edo"} // optional lock
                 className="w-full rounded-md border px-3 py-2 text-sm bg-background"
-                >
+              >
                 {/* Only show "All" for non-EDO users */}
                 {user?.userType !== "edo" && (
-                <option value="all">All</option>
+                  <option value="all">All</option>
                 )}
 
                 {edoOptions.map(([id, name]) => (
@@ -417,24 +422,24 @@ function exportExcel() {
                     </option>
                   ))}
                 </select>
-              </div>              
+              </div>
             )}
 
             <div>
-            <label className="block text-xs mb-1">Status</label>
-            <select
-              className="w-full rounded-md border px-3 py-2 text-sm bg-background"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="all">All</option>
-              <option value="approved">Approved</option>
-              <option value="pending">Pending</option>
-              <option value="rejected">Rejected</option>
-            </select>
-          </div>
+              <label className="block text-xs mb-1">Status</label>
+              <select
+                className="w-full rounded-md border px-3 py-2 text-sm bg-background"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="all">All</option>
+                <option value="approved">Approved</option>
+                <option value="pending">Pending</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
 
-          <div>
+            <div>
               <label className="block text-xs mb-1">Relief Type</label>
               <select
                 className="w-full rounded-md border px-3 py-2 text-sm bg-background"
@@ -482,9 +487,9 @@ function exportExcel() {
           </Card>
         </div>
 
-        <GroupedRelieverTable title="Totals by Reliever — Pending" rows={groupedPending} />
-        <GroupedRelieverTable title="Totals by Reliever — Approved" rows={groupedApproved} />
-        <GroupedRelieverTable title="Totals by Reliever — Rejected" rows={groupedRejected} />
+        <GroupedRelieverTable title="Totals by Reliever - Pending" rows={groupedPending} />
+        <GroupedRelieverTable title="Totals by Reliever - Approved" rows={groupedApproved} />
+        <GroupedRelieverTable title="Totals by Reliever - Rejected" rows={groupedRejected} />
       </div>
 
       <div className="print-report hidden print:block">
@@ -495,10 +500,10 @@ function exportExcel() {
           <div className="print-meta">
             <h1>Reliever Summary Report</h1>
             <p>Date range: {from || "Any"} to {to || "Any"}</p>
-            <p>EDO:{" "}{edoFilter === "all"? "All": filtered[0]?.edoName || edoFilter}</p>
+            <p>EDO:{" "}{edoFilter === "all" ? "All" : filtered[0]?.edoName || edoFilter}</p>
             <p>Supplier / Reliever: {supplierFilter === "all" ? "All" : supplierFilter}</p>
             <p>Status: {statusFilter === "all" ? "All" : statusFilter}</p>
-            <p>Relief Type:{" "}{reliefTypeFilter === "all"? "All": labelType(reliefTypeFilter as RelieverInvoice["reliefType"])}</p>
+            <p>Relief Type:{" "}{reliefTypeFilter === "all" ? "All" : labelType(reliefTypeFilter as RelieverInvoice["reliefType"])}</p>
           </div>
         </div>
 
@@ -570,23 +575,23 @@ function exportExcel() {
             </thead>
             <tbody>
               {[...filtered].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-              .map((r) => (
-                <tr key={r.id}>
-                  <td>{r.date}</td>
-                  <td>{r.relieverCompanyId}</td>
-                  <td>{r.edoName}</td>
-                  <td>{r.routeCode}</td>
-                  <td>{labelType(r.reliefType)}</td>
-                  <td>R {r.amount.toFixed(2)}</td>
-                  <td className="capitalize">{r.status}</td>
-                  <td className="capitalize">{r.status === "approved"
-                       ? r.approvedBy || "-"
-                       : r.status === "rejected"
-                       ? r.rejectedBy || "-"
-                       : "-"}
+                .map((r) => (
+                  <tr key={r.id}>
+                    <td>{r.date}</td>
+                    <td>{r.relieverCompanyId}</td>
+                    <td>{r.edoName}</td>
+                    <td>{r.routeCode}</td>
+                    <td>{labelType(r.reliefType)}</td>
+                    <td>R {r.amount.toFixed(2)}</td>
+                    <td className="capitalize">{r.status}</td>
+                    <td className="capitalize">{r.status === "approved"
+                      ? r.approvedBy || "-"
+                      : r.status === "rejected"
+                        ? r.rejectedBy || "-"
+                        : "-"}
                     </td>
-                </tr>
-              ))}
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>

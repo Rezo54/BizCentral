@@ -1,4 +1,4 @@
-import { FieldValue } from 'firebase-admin/firestore';
+﻿import { FieldValue } from 'firebase-admin/firestore';
 import {
   AuthorizationError,
   authorizationStatus,
@@ -43,7 +43,15 @@ export async function PATCH(
       }
 
       // Canonical display name comes from the trusted userAccess record. Never trust a client-supplied approver name.
-      const actorName = clean(context.access.name) || clean(context.token.name) || clean(context.token.email) || context.uid;
+      const userSnap = await context.db.collection('users').doc(context.uid).get();
+      const userData = userSnap.exists ? userSnap.data() ?? {} : {};
+      const actorName =
+        clean(context.access.name) ||
+        clean(userData.name) ||
+        clean(userData.displayName) ||
+        clean(context.token.name) ||
+        clean(context.token.email) ||
+        context.uid;
       if (decision === 'approve') {
         transaction.update(invoiceRef, {
           status: 'approved',
@@ -77,3 +85,4 @@ export async function PATCH(
     return Response.json({ ok: false, error: 'Invoice decision failed' }, { status: 500 });
   }
 }
+
