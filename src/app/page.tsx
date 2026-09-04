@@ -10,8 +10,8 @@ const LOGIN_IMAGES = [
     alt: 'Logistics warehouse and distribution operations',
   },
   {
-    src: 'https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?auto=format&fit=crop&w=1920&q=85',
-    alt: 'Modern logistics and supply chain operations',
+    src: 'https://images.unsplash.com/photo-1494412574643-ff11b0a5c1c3?auto=format&fit=crop&w=1920&q=85',
+    alt: 'Transport and logistics operations',
   },
   {
     src: 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1920&q=85',
@@ -70,13 +70,11 @@ export default function LoginPage() {
       </div>
 
       <div className="relative hidden overflow-hidden bg-muted lg:block">
-        <Image
+        <img
           src={loginBg.src}
           alt={loginBg.alt}
-          fill
-          sizes="50vw"
-          className="object-cover dark:brightness-[0.3]"
-          priority
+          className="absolute inset-0 h-full w-full object-cover dark:brightness-[0.3]"
+          referrerPolicy="no-referrer"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-black/5" />
         <div className="absolute bottom-5 right-6 rounded-full bg-black/35 px-3 py-1.5 text-xs text-white/90 backdrop-blur-sm">
