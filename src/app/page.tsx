@@ -4,24 +4,10 @@ import Image from 'next/image';
 import { LoginForm } from '@/components/login-form';
 import Link from 'next/link';
 
-const LOGIN_IMAGES = [
-  {
-    src: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1920&q=85',
-    alt: 'Logistics warehouse and distribution operations',
-  },
-  {
-    src: 'https://images.unsplash.com/photo-1494412574643-ff11b0a5c1c3?auto=format&fit=crop&w=1920&q=85',
-    alt: 'Transport and logistics operations',
-  },
-  {
-    src: 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1920&q=85',
-    alt: 'Modern business workspace',
-  },
-  {
-    src: 'https://images.unsplash.com/photo-1521737711867-e3b97375f902?auto=format&fit=crop&w=1920&q=85',
-    alt: 'Business team working together',
-  },
-];
+const LOGIN_IMAGES = Array.from({ length: 20 }, (_, index) => ({
+  src: `/login-images/login-${String(index + 1).padStart(2, '0')}.jpg`,
+  alt: 'Taskraft business, FMCG and logistics operations',
+}));
 
 function currentWeeklyImage() {
   const week = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000));
@@ -70,11 +56,13 @@ export default function LoginPage() {
       </div>
 
       <div className="relative hidden overflow-hidden bg-muted lg:block">
-        <img
+        <Image
           src={loginBg.src}
           alt={loginBg.alt}
-          className="absolute inset-0 h-full w-full object-cover dark:brightness-[0.3]"
-          referrerPolicy="no-referrer"
+          fill
+          sizes="50vw"
+          className="object-cover dark:brightness-[0.3]"
+          priority
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-black/5" />
         <div className="absolute bottom-5 right-6 rounded-full bg-black/35 px-3 py-1.5 text-xs text-white/90 backdrop-blur-sm">
