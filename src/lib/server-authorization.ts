@@ -16,6 +16,7 @@ export type BizAccessRecord = {
   accountRole?: string;
   companyId?: string;
   edoId?: string;
+  relieverId?: string;
   name?: string;
   [key: string]: unknown;
 };
@@ -84,7 +85,10 @@ export async function requireAuthContext(request: Request): Promise<AuthContext>
     userType: normalized(access.userType),
     accessLevel: normalized(access.accessLevel ?? access.role),
     accountRole: normalized(access.accountRole),
-    companyId: String(access.companyId ?? access.edoId ?? '').trim(),
+    // companyId is the canonical organisation/scope identifier for the current
+    // user. Older reliever records used relieverId, so include it as a migration
+    // fallback while consumers move to the canonical companyId property.
+    companyId: String(access.companyId ?? access.edoId ?? access.relieverId ?? '').trim(),
   };
 }
 

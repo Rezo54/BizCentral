@@ -1,40 +1,22 @@
 // src/data/invoicing.ts
 
-import {
-  collection,
-  addDoc,
-  getDocs,
-  query,
-  where,
-  doc,
-  updateDoc,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { auth } from '@/lib/firebase';
 
-// ==============================
-// TYPES
-// ==============================
-
-export type ReliefType = "day" | "second_delivery" | "sunday_ph";
-export type InvoiceStatus = "pending" | "approved" | "rejected";
+export type ReliefType = 'day' | 'second_delivery' | 'sunday_ph';
+export type InvoiceStatus = 'pending' | 'approved' | 'rejected';
 
 export type RelieverInvoice = {
   id: string;
-
   relieverUserId: string;
   relieverBusinessName: string;
   relieverCompanyId: string;
-
   edoId: string;
   edoName: string;
-
   date: string;
   routeCode: string;
   reliefType: ReliefType;
-
   rate: number;
   amount: number;
-
   status: InvoiceStatus;
   submittedAt: string;
   approvedAt?: string;
@@ -43,140 +25,74 @@ export type RelieverInvoice = {
   rejectedBy?: string;
 };
 
-// ==============================
-// RATE MATRIX
-// ==============================
-
 const RATE_MATRIX: Record<ReliefType, number> = {
   day: 470,
   second_delivery: 235,
   sunday_ph: 590,
 };
 
-export function getAllRates() {
-  return { ...RATE_MATRIX };
-}
+export function getAllRates() { return { ...RATE_MATRIX }; }
+export function setRate(type: ReliefType, value: number) { RATE_MATRIX[type] = value; }
+export function getRateFor(type: ReliefType): number { return RATE_MATRIX[type]; }
 
-export function setRate(type: ReliefType, value: number) {
-  RATE_MATRIX[type] = value;
+async function invoiceApi(method: 'GET' | 'POST', body?: unknown) {
+  const firebaseUser = auth.currentUser;
+  if (!firebaseUser) throw new Error('Your authenticated session is not available.');
+  const token = await firebaseUser.getIdToken();
+  const response = await fetch('/api/invoices', {
+    method,
+    cache: 'no-store',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'Invoice request failed');
+  return payload;
 }
-
-export function getRateFor(type: ReliefType): number {
-  return RATE_MATRIX[type];
-}
-
-// ==============================
-// CREATE (FIREBASE)
-// ==============================
 
 export async function createRelieverInvoice(input: {
-  relieverUserId: string;
-  relieverBusinessName: string;
-  relieverCompanyId: string;
   edoId: string;
-  edoName: string;
-
-  // 🔥 Firebase idenitfication
-  createdByUid?: string;
-  edoUid?: string;
-
   date: string;
   routeCode: string;
   reliefType: ReliefType;
+  // Legacy caller fields remain optional during migration but are deliberately
+  // ignored by the server. Identity, names, rate, amount and status are trusted
+  // only when resolved server-side.
+  relieverUserId?: string;
+  relieverBusinessName?: string;
+  relieverCompanyId?: string;
+  edoName?: string;
+  createdByUid?: string;
+  edoUid?: string;
 }): Promise<RelieverInvoice> {
-  const rate = getRateFor(input.reliefType);
-
-  const invoice = {
-    ...input,
-    rate,
-    amount: rate,
-    status: "pending" as InvoiceStatus,
-    submittedAt: new Date().toISOString(),
-  };
-
-  const docRef = await addDoc(collection(db, "invoices"), invoice);
-
-  return {
-    id: docRef.id,
-    ...invoice,
-  };
+  const payload = await invoiceApi('POST', {
+    edoId: input.edoId,
+    date: input.date,
+    routeCode: input.routeCode,
+    reliefType: input.reliefType,
+  });
+  return payload.invoice as RelieverInvoice;
 }
-
-// ==============================
-// LISTING (FIREBASE)
-// ==============================
 
 export async function listAllRelieverInvoices(): Promise<RelieverInvoice[]> {
-  const snapshot = await getDocs(collection(db, "invoices"));
-
-  return snapshot.docs.map((doc) => ({
-    id: doc.id,
-    ...(doc.data() as Omit<RelieverInvoice, "id">),
-  }));
+  const payload = await invoiceApi('GET');
+  return payload.invoices ?? [];
 }
 
-export async function listInvoicesForRelieverCompany(
-  companyId: string
-): Promise<RelieverInvoice[]> {
-  const q = query(
-    collection(db, "invoices"),
-    where("relieverCompanyId", "==", companyId)
-  );
-
-  const snapshot = await getDocs(q);
-
-  return snapshot.docs.map((doc) => ({
-    id: doc.id,
-    ...(doc.data() as Omit<RelieverInvoice, "id">),
-  }));
+// Scope is enforced by the API from the authenticated canonical session. These
+// compatibility functions intentionally ignore caller-supplied scope values.
+export async function listInvoicesForRelieverCompany(_companyId?: string): Promise<RelieverInvoice[]> {
+  const payload = await invoiceApi('GET');
+  return payload.invoices ?? [];
 }
 
-export async function listInvoicesForEdo(
-  edoId: string
-): Promise<RelieverInvoice[]> {
-  const q = query(
-    collection(db, "invoices"),
-    where("edoId", "==", edoId)
-  );
-
-  const snapshot = await getDocs(q);
-
-  return snapshot.docs.map((doc) => ({
-    id: doc.id,
-    ...(doc.data() as Omit<RelieverInvoice, "id">),
-  }));
+export async function listInvoicesForEdo(_edoId?: string): Promise<RelieverInvoice[]> {
+  const payload = await invoiceApi('GET');
+  return payload.invoices ?? [];
 }
 
-// ==============================
-// APPROVE / REJECT
-// ==============================
-
-export async function approveRelieverInvoice(
-  id: string,
-  approverName: string
-) {
-  const ref = doc(db, "invoices", id);
-
-  await updateDoc(ref, {
-    status: "approved" as InvoiceStatus,
-    approvedAt: new Date().toISOString(),
-    approvedBy: approverName,
-    rejectedAt: null,
-    rejectedBy: null,
-  });
-}
-
-export async function rejectRelieverInvoice(
-  id: string,
-  approverName: string
-) {
-  const ref = doc(db, "invoices", id);
-
-  await updateDoc(ref, {
-    status: "rejected" as InvoiceStatus,
-    rejectedAt: new Date().toISOString(),
-    rejectedBy: approverName,
-    approvedAt: null,
-    approvedBy: null,
-  });
-}
+// Invoice approval/rejection is intentionally NOT implemented in this browser
+// data module. All decision transitions go through the protected decision API.
