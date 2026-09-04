@@ -6,8 +6,6 @@ import {
   getDocs,
   query,
   where,
-  doc,
-  updateDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -76,7 +74,7 @@ export async function createRelieverInvoice(input: {
   edoId: string;
   edoName: string;
 
-  // 🔥 Firebase idenitfication
+  // Firebase identification
   createdByUid?: string;
   edoUid?: string;
 
@@ -147,36 +145,8 @@ export async function listInvoicesForEdo(
   }));
 }
 
-// ==============================
-// APPROVE / REJECT
-// ==============================
-
-export async function approveRelieverInvoice(
-  id: string,
-  approverName: string
-) {
-  const ref = doc(db, "invoices", id);
-
-  await updateDoc(ref, {
-    status: "approved" as InvoiceStatus,
-    approvedAt: new Date().toISOString(),
-    approvedBy: approverName,
-    rejectedAt: null,
-    rejectedBy: null,
-  });
-}
-
-export async function rejectRelieverInvoice(
-  id: string,
-  approverName: string
-) {
-  const ref = doc(db, "invoices", id);
-
-  await updateDoc(ref, {
-    status: "rejected" as InvoiceStatus,
-    rejectedAt: new Date().toISOString(),
-    rejectedBy: approverName,
-    approvedAt: null,
-    approvedBy: null,
-  });
-}
+// Invoice approval/rejection is intentionally NOT implemented in this
+// browser-side data module. All decision transitions must go through:
+// PATCH /api/invoices/{invoiceId}/decision
+// where canonical userAccess authorization, EDO ownership and pending-state
+// checks are enforced server-side.
