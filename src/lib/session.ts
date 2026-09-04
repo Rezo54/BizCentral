@@ -72,6 +72,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
           return;
         }
 
+        const companyId = user.companyId ? String(user.companyId) : undefined;
         resolve({
           uid: user.uid,
           name: String(user.name ?? '').trim(),
@@ -79,7 +80,10 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
           userType: user.userType as UserType,
           accessLevel: user.accessLevel as AccessLevel,
           accountRole: String(user.accountRole ?? '').trim().toLowerCase(),
-          companyId: user.companyId ? String(user.companyId) : undefined,
+          companyId,
+          // Compatibility alias only. Authorization comes from canonical
+          // companyId returned by /api/session, never from a browser profile.
+          relieverId: user.userType === 'reliever' ? companyId : undefined,
         });
       } catch (error) {
         console.error('Unable to load canonical session:', error);
