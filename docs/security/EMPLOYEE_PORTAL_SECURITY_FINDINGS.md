@@ -46,31 +46,27 @@ NONE.
 ## EP-SEC-002 — Activation ID verifier is not throttled before OTP counters
 
 **Severity:** High  
-**Status:** Open — remediation design/test required  
+**Status:** Remediated on agent branch — regression verification pending  
 **Scope:** `src/app/api/staff/activation/check/route.ts`
 
 ### Finding
 
-The activation endpoint verifies the supplied six-digit ID suffix before it enters the transaction that enforces OTP cooldown, window, daily and blocking counters. A wrong ID suffix returns `VERIFICATION_FAILED` before those counters are read or incremented.
+The activation endpoint previously verified the supplied six-digit ID suffix before entering the transaction that enforced OTP cooldown, window, daily and blocking counters. A wrong ID suffix returned `VERIFICATION_FAILED` before those counters were read or incremented.
 
-An attacker who knows or guesses a valid employee cellphone can therefore make repeated guesses against the six-digit identity-verification step without being constrained by the existing OTP request limits.
+### Remediation implemented
 
-### Security impact
+The activation identity verifier now participates in the same atomic account transaction as the OTP controls. It maintains a separate failed-verification window, blocks the employee activation identity after five failed ID-suffix attempts within 15 minutes for 30 minutes, prevents a correct suffix from bypassing an active block, and clears the failed-verification state after the block expires and a correct verification succeeds.
 
-The OTP controls protect successful identity verification / OTP initiation, but they do not currently rate-limit repeated failed guesses against the preceding identity verifier. This weakens brute-force resistance of the activation flow.
-
-### Required remediation
-
-Introduce a bounded failed-verification counter/block for the activation identity check without exposing whether the cellphone or ID suffix was correct. The implementation must preserve generic failure responses and should use an atomic transaction so concurrent requests cannot bypass the threshold.
+The existing generic verification response is retained for ordinary invalid-ID attempts. Unknown cellphones still return the same generic verification failure and do not reveal employee existence.
 
 ### Verification required
 
 Regression coverage should confirm that:
 
 1. Invalid ID attempts increment the failed-verification counter.
-2. Repeated failures trigger a temporary block.
+2. Five failures trigger a temporary block.
 3. A blocked identity cannot bypass the block with a correct ID suffix.
-4. Successful verification clears or safely resets the failed-verification state.
+4. Successful verification after expiry clears the failed-verification state.
 5. Unknown cellphones retain the same generic external response and cannot be used for employee enumeration.
 6. Existing OTP cooldown/window/daily limits continue to work independently.
 
