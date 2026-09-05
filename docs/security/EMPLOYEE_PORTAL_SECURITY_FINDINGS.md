@@ -73,3 +73,29 @@ Regression coverage should confirm that:
 ### Production changes
 
 NONE.
+
+---
+
+## EP-SEC-003 — Staff profile API returns the full employee ID number
+
+**Severity:** Medium  
+**Status:** Remediated on agent branch — UI/regression verification pending  
+**Scope:** `src/app/api/staff/profile/route.ts`
+
+### Finding
+
+The authenticated staff profile endpoint returned the complete `employees.idNumber` value to the browser. The profile UI may need identity context, but exposing the full national ID in an ordinary profile response unnecessarily increases sensitive-data exposure in browser memory, developer tools, logs and downstream client code.
+
+### Remediation implemented
+
+The endpoint now returns a masked ID value showing only the final four digits. The authoritative full ID remains server-side in Firestore for workflows that genuinely require it.
+
+### Verification required
+
+1. Profile UI remains usable with the masked value.
+2. Full ID numbers are not returned by other Employee Portal endpoints unless strictly required.
+3. Profile change workflows do not depend on the full ID value being sent to the browser.
+
+### Production changes
+
+NONE.
