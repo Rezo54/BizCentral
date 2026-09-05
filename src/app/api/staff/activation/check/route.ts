@@ -17,25 +17,21 @@ import {
 } from '@/lib/employee-security';
 
 // =====================================================
-// OTP SECURITY SETTINGS
+// SECURITY SETTINGS
 // =====================================================
 
 const OTP_COOLDOWN_SECONDS = 60;
-
 const OTP_WINDOW_MINUTES = 15;
 const OTP_MAX_PER_WINDOW = 3;
-
 const OTP_BLOCK_MINUTES = 30;
-
 const OTP_MAX_PER_DAY = 10;
+
+const ID_VERIFY_MAX_FAILURES = 5;
+const ID_VERIFY_WINDOW_MINUTES = 15;
+const ID_VERIFY_BLOCK_MINUTES = 30;
 
 // =====================================================
 // GENERIC VERIFICATION FAILURE
-//
-// Don't reveal whether:
-// - cellphone exists
-// - ID exists
-// - employee exists
 // =====================================================
 
 function verificationFailed() {
@@ -46,9 +42,19 @@ function verificationFailed() {
       message:
         'We could not verify your employee details. Please check the information entered or contact your administrator.',
     },
+    { status: 400 }
+  );
+}
+
+function verificationBlocked() {
+  return NextResponse.json(
     {
-      status: 400,
-    }
+      success: false,
+      code: 'VERIFICATION_BLOCKED',
+      message:
+        'Too many verification attempts. Please try again later.',
+    },
+    { status: 429 }
   );
 }
 
@@ -60,40 +66,20 @@ export async function POST(
   request: Request
 ) {
   try {
-
-    // =================================================
-    // FIREBASE ADMIN
-    //
-    // Initialise inside the request so that any
-    // configuration error is caught by this route's
-    // try/catch instead of crashing during module load.
-    // =================================================
-
     const adminDb =
       await getAdminDb();
-
-    // =================================================
-    // READ REQUEST
-    // =================================================
 
     const body =
       await request.json();
 
     const cellphone =
       normalizeCellphone(
-        String(
-          body.cellphone || ''
-        )
+        String(body.cellphone || '')
       );
 
     const idLastSix =
-      String(
-        body.idLastSix || ''
-      ).replace(/\D/g, '');
-
-    // =================================================
-    // BASIC INPUT VALIDATION
-    // =================================================
+      String(body.idLastSix || '')
+        .replace(/\D/g, '');
 
     if (
       !/^27\d{9}$/.test(cellphone) ||
@@ -102,24 +88,8 @@ export async function POST(
       return verificationFailed();
     }
 
-    // =================================================
-    // CONVERT TO EXISTING EMPLOYEE FORMAT
-    //
-    // Firestore employees currently store:
-    //
-    // 0631234567
-    //
-    // rather than:
-    //
-    // 27631234567
-    // =================================================
-
     const localCellphone =
       cellphoneToLocal(cellphone);
-
-    // =================================================
-    // FIND EMPLOYEE
-    // =================================================
 
     const employeeQuery =
       await adminDb
@@ -136,14 +106,10 @@ export async function POST(
       return verificationFailed();
     }
 
-    // Cellphone must uniquely identify one employee.
-
     if (employeeQuery.size !== 1) {
-
       console.error(
         'Duplicate employee cellphone detected.'
       );
-
       return verificationFailed();
     }
 
@@ -156,45 +122,24 @@ export async function POST(
     const employeeId =
       employeeDoc.id;
 
-    // =================================================
-    // EMPLOYMENT STATUS
-    // =================================================
-
-    if (
-      employee.status !== 'employed'
-    ) {
+    if (employee.status !== 'employed') {
       return verificationFailed();
     }
 
-    // =================================================
-    // AUTHORITATIVE ID
-    //
-    // This remains server-side.
-    // It is NEVER returned to the browser.
-    // =================================================
-
     const fullIdNumber =
-      String(
-        employee.idNumber || ''
-      ).replace(/\D/g, '');
+      String(employee.idNumber || '')
+        .replace(/\D/g, '');
 
-    if (
-      fullIdNumber.length < 6
-    ) {
+    if (fullIdNumber.length < 6) {
       console.error(
         'Employee ID number is missing or invalid:',
         employeeId
       );
-
       return verificationFailed();
     }
 
     const actualLastSix =
       fullIdNumber.slice(-6);
-
-    // =================================================
-    // CREATE EXPECTED HMAC
-    // =================================================
 
     const expectedHash =
       createIdVerificationHash(
@@ -202,122 +147,180 @@ export async function POST(
         actualLastSix
       );
 
-    // =================================================
-    // CREATE HMAC FROM ENTERED VALUE
-    // =================================================
-
     const enteredHash =
       createIdVerificationHash(
         employeeId,
         idLastSix
       );
 
-    // =================================================
-    // CONSTANT-TIME COMPARISON
-    // =================================================
-
-    if (
-      !safeHashCompare(
+    const idMatches =
+      safeHashCompare(
         expectedHash,
         enteredHash
-      )
-    ) {
-      return verificationFailed();
-    }
-
-    // =================================================
-    // PORTAL ACCESS RECORD
-    // =================================================
+      );
 
     const portalRef =
       adminDb
-        .collection(
-          'employeePortalAccess'
-        )
+        .collection('employeePortalAccess')
         .doc(employeeId);
 
-    const now =
-      Timestamp.now();
+    const now = Timestamp.now();
 
-    // =================================================
-    // TRANSACTION
-    //
-    // This prevents two simultaneous requests from
-    // bypassing our OTP counters.
-    // =================================================
-
+    // All account-specific identity and OTP throttling is performed in one
+    // transaction so concurrent requests cannot bypass either control.
     const result =
       await adminDb.runTransaction(
         async (transaction) => {
-
           const portalSnap =
-            await transaction.get(
-              portalRef
-            );
+            await transaction.get(portalRef);
 
           const portalData =
             portalSnap.exists
               ? portalSnap.data()
               : undefined;
 
-          // =============================================
-          // ALREADY ACTIVATED
-          // =============================================
-
           if (
-            portalData
-              ?.portalActivated === true
+            portalData?.portalActivated === true
           ) {
             return {
               allowed: false,
-              code:
-                'ALREADY_ACTIVATED',
+              code: 'ALREADY_ACTIVATED',
               status: 409,
-
               message:
                 'Your Employee Portal account is already activated. Please login or use Forgot PIN.',
             };
           }
 
           // =============================================
-          // CURRENT OTP BLOCK
+          // ID VERIFICATION BRUTE-FORCE CONTROL
           // =============================================
 
-          const blockedUntil =
-            portalData
-              ?.otpBlockedUntil;
+          const idBlockedUntil =
+            portalData?.idVerifyBlockedUntil;
 
           if (
-            blockedUntil &&
-            blockedUntil.toMillis() >
-              now.toMillis()
+            idBlockedUntil instanceof Timestamp &&
+            idBlockedUntil.toMillis() > now.toMillis()
           ) {
             return {
               allowed: false,
-              code:
-                'OTP_BLOCKED',
+              code: 'VERIFICATION_BLOCKED',
               status: 429,
+              message:
+                'Too many verification attempts. Please try again later.',
+            };
+          }
 
+          let idVerifyFailureCount =
+            Number(
+              portalData?.idVerifyFailureCount || 0
+            );
+
+          let idVerifyWindowStartedAt =
+            portalData?.idVerifyWindowStartedAt;
+
+          const idWindowExpired =
+            !(idVerifyWindowStartedAt instanceof Timestamp) ||
+            (
+              now.toMillis() -
+              idVerifyWindowStartedAt.toMillis()
+            ) >
+              ID_VERIFY_WINDOW_MINUTES * 60 * 1000;
+
+          if (idWindowExpired) {
+            idVerifyFailureCount = 0;
+            idVerifyWindowStartedAt = now;
+          }
+
+          if (!idMatches) {
+            const nextFailures =
+              idVerifyFailureCount + 1;
+
+            const shouldBlock =
+              nextFailures >=
+              ID_VERIFY_MAX_FAILURES;
+
+            transaction.set(
+              portalRef,
+              {
+                employeeId,
+                edoId:
+                  employee.edoId || null,
+                cellphoneNormalized:
+                  cellphone,
+                portalActivated:
+                  portalData?.portalActivated === true,
+                idVerifyFailureCount:
+                  shouldBlock ? 0 : nextFailures,
+                idVerifyWindowStartedAt,
+                idVerifyBlockedUntil:
+                  shouldBlock
+                    ? Timestamp.fromMillis(
+                        now.toMillis() +
+                        ID_VERIFY_BLOCK_MINUTES *
+                          60 * 1000
+                      )
+                    : null,
+                lastIdVerifyFailedAt: now,
+                updatedAt:
+                  FieldValue.serverTimestamp(),
+                ...(
+                  portalSnap.exists
+                    ? {}
+                    : {
+                        createdAt:
+                          FieldValue.serverTimestamp(),
+                      }
+                ),
+              },
+              { merge: true }
+            );
+
+            return {
+              allowed: false,
+              code:
+                shouldBlock
+                  ? 'VERIFICATION_BLOCKED'
+                  : 'VERIFICATION_FAILED',
+              status:
+                shouldBlock ? 429 : 400,
+              message:
+                shouldBlock
+                  ? 'Too many verification attempts. Please try again later.'
+                  : 'We could not verify your employee details. Please check the information entered or contact your administrator.',
+            };
+          }
+
+          // A correct ID cannot bypass an existing block (checked above).
+          // Once the block has expired, successful verification clears the
+          // failed-identity state before normal OTP throttling proceeds.
+
+          const blockedUntil =
+            portalData?.otpBlockedUntil;
+
+          if (
+            blockedUntil instanceof Timestamp &&
+            blockedUntil.toMillis() > now.toMillis()
+          ) {
+            return {
+              allowed: false,
+              code: 'OTP_BLOCKED',
+              status: 429,
               message:
                 'Too many verification requests. Please try again later.',
             };
           }
 
-          // =============================================
-          // 60 SECOND COOLDOWN
-          // =============================================
-
           const lastOtpRequestedAt =
-            portalData
-              ?.lastOtpRequestedAt;
+            portalData?.lastOtpRequestedAt;
 
-          if (lastOtpRequestedAt) {
-
+          if (
+            lastOtpRequestedAt instanceof Timestamp
+          ) {
             const elapsedSeconds =
               (
                 now.toMillis() -
-                lastOtpRequestedAt
-                  .toMillis()
+                lastOtpRequestedAt.toMillis()
               ) / 1000;
 
             if (
@@ -326,131 +329,85 @@ export async function POST(
             ) {
               return {
                 allowed: false,
-                code:
-                  'OTP_COOLDOWN',
+                code: 'OTP_COOLDOWN',
                 status: 429,
-
                 message:
                   'Please wait before requesting another verification code.',
               };
             }
           }
 
-          // =============================================
-          // 15 MINUTE WINDOW
-          // =============================================
-
           let otpRequestCount =
             Number(
-              portalData
-                ?.otpRequestCount ||
-                0
+              portalData?.otpRequestCount || 0
             );
 
           let otpWindowStartedAt =
-            portalData
-              ?.otpWindowStartedAt;
+            portalData?.otpWindowStartedAt;
 
           const otpWindowExpired =
-            !otpWindowStartedAt ||
+            !(otpWindowStartedAt instanceof Timestamp) ||
             (
               now.toMillis() -
-              otpWindowStartedAt
-                .toMillis()
+              otpWindowStartedAt.toMillis()
             ) >
-              OTP_WINDOW_MINUTES *
-                60 *
-                1000;
+              OTP_WINDOW_MINUTES * 60 * 1000;
 
           if (otpWindowExpired) {
-
             otpRequestCount = 0;
-
-            otpWindowStartedAt =
-              now;
+            otpWindowStartedAt = now;
           }
-
-          // =============================================
-          // WINDOW LIMIT
-          // =============================================
 
           if (
             otpRequestCount >=
             OTP_MAX_PER_WINDOW
           ) {
-
             const blockUntil =
               Timestamp.fromMillis(
                 now.toMillis() +
-                  OTP_BLOCK_MINUTES *
-                    60 *
-                    1000
+                OTP_BLOCK_MINUTES *
+                  60 * 1000
               );
 
             transaction.set(
               portalRef,
               {
-                otpBlockedUntil:
-                  blockUntil,
-
+                otpBlockedUntil: blockUntil,
                 updatedAt:
-                  FieldValue
-                    .serverTimestamp(),
+                  FieldValue.serverTimestamp(),
               },
-              {
-                merge: true,
-              }
+              { merge: true }
             );
 
             return {
               allowed: false,
-              code:
-                'OTP_BLOCKED',
+              code: 'OTP_BLOCKED',
               status: 429,
-
               message:
                 'Too many verification requests. Please try again later.',
             };
           }
 
-          // =============================================
-          // DAILY WINDOW
-          // =============================================
-
           let otpDailyCount =
             Number(
-              portalData
-                ?.otpDailyCount ||
-                0
+              portalData?.otpDailyCount || 0
             );
 
           let otpDailyStartedAt =
-            portalData
-              ?.otpDailyStartedAt;
+            portalData?.otpDailyStartedAt;
 
           const dailyWindowExpired =
-            !otpDailyStartedAt ||
+            !(otpDailyStartedAt instanceof Timestamp) ||
             (
               now.toMillis() -
-              otpDailyStartedAt
-                .toMillis()
+              otpDailyStartedAt.toMillis()
             ) >
-              24 *
-                60 *
-                60 *
-                1000;
+              24 * 60 * 60 * 1000;
 
           if (dailyWindowExpired) {
-
             otpDailyCount = 0;
-
-            otpDailyStartedAt =
-              now;
+            otpDailyStartedAt = now;
           }
-
-          // =============================================
-          // DAILY LIMIT
-          // =============================================
 
           if (
             otpDailyCount >=
@@ -458,83 +415,51 @@ export async function POST(
           ) {
             return {
               allowed: false,
-              code:
-                'OTP_DAILY_LIMIT',
+              code: 'OTP_DAILY_LIMIT',
               status: 429,
-
               message:
                 'The daily verification limit has been reached. Please try again later.',
             };
           }
 
-          // =============================================
-          // CREATE / UPDATE PORTAL ACCESS
-          // =============================================
-
-          const portalRecord = {
-
-            employeeId,
-
-            edoId:
-              employee.edoId ||
-              null,
-
-            cellphoneNormalized:
-              cellphone,
-
-            // HMAC only.
-            // Never store raw last 6 digits.
-            idVerificationHash:
-              expectedHash,
-
-            portalActivated:
-              false,
-
-            authUid:
-              portalData
-                ?.authUid ||
-              null,
-
-            // OTP counters
-            otpRequestCount:
-              otpRequestCount + 1,
-
-            otpWindowStartedAt,
-
-            otpDailyCount:
-              otpDailyCount + 1,
-
-            otpDailyStartedAt,
-
-            lastOtpRequestedAt:
-              now,
-
-            // Previous block has expired,
-            // therefore clear it.
-            otpBlockedUntil:
-              null,
-
-            updatedAt:
-              FieldValue
-                .serverTimestamp(),
-
-            ...(
-              portalSnap.exists
-                ? {}
-                : {
-                    createdAt:
-                      FieldValue
-                        .serverTimestamp(),
-                  }
-            ),
-          };
-
           transaction.set(
             portalRef,
-            portalRecord,
             {
-              merge: true,
-            }
+              employeeId,
+              edoId:
+                employee.edoId || null,
+              cellphoneNormalized:
+                cellphone,
+              idVerificationHash:
+                expectedHash,
+              portalActivated: false,
+              authUid:
+                portalData?.authUid || null,
+              idVerifyFailureCount: 0,
+              idVerifyWindowStartedAt:
+                FieldValue.delete(),
+              idVerifyBlockedUntil:
+                FieldValue.delete(),
+              otpRequestCount:
+                otpRequestCount + 1,
+              otpWindowStartedAt,
+              otpDailyCount:
+                otpDailyCount + 1,
+              otpDailyStartedAt,
+              lastOtpRequestedAt: now,
+              otpBlockedUntil: null,
+              updatedAt:
+                FieldValue.serverTimestamp(),
+              ...(
+                portalSnap.exists
+                  ? {}
+                  : {
+                      createdAt:
+                        FieldValue.serverTimestamp(),
+                    }
+              ),
+            },
+            { merge: true }
           );
 
           return {
@@ -545,59 +470,40 @@ export async function POST(
         }
       );
 
-    // =================================================
-    // BLOCKED / NOT ALLOWED
-    // =================================================
-
     if (!result.allowed) {
+      if (
+        result.code === 'VERIFICATION_FAILED'
+      ) {
+        return verificationFailed();
+      }
+
+      if (
+        result.code === 'VERIFICATION_BLOCKED'
+      ) {
+        return verificationBlocked();
+      }
 
       return NextResponse.json(
         {
           success: false,
-          code:
-            result.code,
-          message:
-            result.message,
+          code: result.code,
+          message: result.message,
         },
-        {
-          status:
-            result.status,
-        }
+        { status: result.status }
       );
     }
-
-    // =================================================
-    // SUCCESS
-    //
-    // Employee has passed:
-    //
-    // ✓ cellphone
-    // ✓ employee status
-    // ✓ ID HMAC
-    // ✓ OTP cooldown
-    // ✓ OTP request window
-    // ✓ daily limit
-    //
-    // Firebase SMS is NOT sent here yet.
-    // =================================================
 
     return NextResponse.json(
       {
         success: true,
         code: 'OTP_ALLOWED',
-
-        cellphone:
-          `+${cellphone}`,
-
+        cellphone: `+${cellphone}`,
         employeeId,
       },
-      {
-        status: 200,
-      }
+      { status: 200 }
     );
 
-  } catch (error: any) {
-
+  } catch (error: unknown) {
     console.error(
       'Employee activation check failed:',
       error
@@ -606,15 +512,11 @@ export async function POST(
     return NextResponse.json(
       {
         success: false,
-        code:
-          'SERVER_ERROR',
-
+        code: 'SERVER_ERROR',
         message:
           'Unable to process activation at this time.',
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
