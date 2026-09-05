@@ -4,13 +4,13 @@
 
 **Severity:** High  
 **Status:** Remediated on agent branch — regression verification pending  
-**Scope:** `src/lib/staff-session.ts`
+**Scope:** `src/lib/staff-session.ts`, `src/app/api/staff/session/route.ts`
 
 ### Finding
 
 `validateStaffSession()` validated only the session document and its expiry. It did not re-check the linked `employeePortalAccess` record before authorising the request.
 
-A session is valid for up to seven days. During that period, a session could remain usable even if the portal account was subsequently deactivated, deleted, or relinked to a different authentication identity.
+A session is valid for up to seven days. During that period, a session could remain usable even if the portal account was subsequently deactivated, deleted, relinked to a different authentication identity, or the linked employee stopped being an active employee.
 
 ### Remediation implemented
 
@@ -23,6 +23,8 @@ A session is valid for up to seven days. During that period, a session could rem
 
 Malformed session records are also deleted when rejected, and valid use refreshes `lastUsedAt`.
 
+The staff-session endpoint additionally revokes the server session and clears the browser cookie if the employee record is missing, no longer has `status === 'employed'`, or its `edoId` no longer matches the authenticated session.
+
 ### Verification required
 
 Regression coverage should confirm that:
@@ -32,6 +34,8 @@ Regression coverage should confirm that:
 3. Missing access rejects and deletes the session.
 4. Changed `employeeId`, `edoId`, or `authUid` rejects and deletes the session.
 5. Expired sessions continue to reject and delete as before.
+6. Missing or non-employed employee records revoke the session and cookie.
+7. An employee moved to another EDO cannot retain the old EDO-scoped session.
 
 ### Production changes
 
