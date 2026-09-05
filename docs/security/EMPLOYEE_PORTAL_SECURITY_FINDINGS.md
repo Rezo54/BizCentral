@@ -27,15 +27,12 @@ The staff-session endpoint additionally revokes the server session and clears th
 
 ### Verification required
 
-Regression coverage should confirm that:
-
 1. Active matching access accepts the session.
-2. Deactivated access rejects and deletes the session.
-3. Missing access rejects and deletes the session.
-4. Changed `employeeId`, `edoId`, or `authUid` rejects and deletes the session.
-5. Expired sessions continue to reject and delete as before.
-6. Missing or non-employed employee records revoke the session and cookie.
-7. An employee moved to another EDO cannot retain the old EDO-scoped session.
+2. Deactivated or missing access rejects and deletes the session.
+3. Changed `employeeId`, `edoId`, or `authUid` rejects and deletes the session.
+4. Expired sessions continue to reject and delete as before.
+5. Missing/non-employed employee records revoke the session and cookie.
+6. An employee moved to another EDO cannot retain the old EDO-scoped session.
 
 ### Production changes
 
@@ -61,14 +58,12 @@ The existing generic verification response is retained for ordinary invalid-ID a
 
 ### Verification required
 
-Regression coverage should confirm that:
-
 1. Invalid ID attempts increment the failed-verification counter.
 2. Five failures trigger a temporary block.
 3. A blocked identity cannot bypass the block with a correct ID suffix.
 4. Successful verification after expiry clears the failed-verification state.
-5. Unknown cellphones retain the same generic external response and cannot be used for employee enumeration.
-6. Existing OTP cooldown/window/daily limits continue to work independently.
+5. Unknown cellphones retain the same generic external response.
+6. Existing OTP cooldown/window/daily limits continue independently.
 
 ### Production changes
 
@@ -84,7 +79,7 @@ NONE.
 
 ### Finding
 
-The authenticated staff profile endpoint returned the complete `employees.idNumber` value to the browser. The profile UI may need identity context, but exposing the full national ID in an ordinary profile response unnecessarily increases sensitive-data exposure in browser memory, developer tools, logs and downstream client code.
+The authenticated staff profile endpoint returned the complete `employees.idNumber` value to the browser. Exposing the full national ID in an ordinary profile response unnecessarily increases sensitive-data exposure in browser memory, developer tools, logs and downstream client code.
 
 ### Remediation implemented
 
@@ -94,7 +89,37 @@ The endpoint now returns a masked ID value showing only the final four digits. T
 
 1. Profile UI remains usable with the masked value.
 2. Full ID numbers are not returned by other Employee Portal endpoints unless strictly required.
-3. Profile change workflows do not depend on the full ID value being sent to the browser.
+3. Profile change workflows do not depend on the full ID being returned by the profile endpoint.
+
+### Production changes
+
+NONE.
+
+---
+
+## EP-SEC-004 — Unauthenticated Firebase Admin diagnostic endpoint
+
+**Severity:** High  
+**Status:** Remediated on agent branch — regression verification pending  
+**Scope:** `src/app/api/staff/admin-test/route.ts`
+
+### Finding
+
+`/api/staff/admin-test` was callable without authentication. It performed a privileged Firebase Admin query and returned internal database/connectivity information. On failure it also returned the raw server exception message to the caller.
+
+### Security impact
+
+The route unnecessarily exposed a privileged diagnostic surface and internal operational/error information to unauthenticated clients.
+
+### Remediation implemented
+
+The historical route is now closed and always returns a generic `404 Not found` response with `Cache-Control: no-store`. It no longer initialises Firebase Admin, queries employee data, or returns internal exception details.
+
+### Verification required
+
+1. Unauthenticated requests receive only the generic 404 response.
+2. No Employee Portal UI depends on this diagnostic endpoint.
+3. Firebase Admin diagnostics, if needed in future, live behind Taskraft admin authorization rather than `/api/staff/*`.
 
 ### Production changes
 
