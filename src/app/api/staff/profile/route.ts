@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { STAFF_SESSION_COOKIE, validateStaffSession } from '@/lib/staff-session';
 
+function maskIdNumber(value: unknown) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length < 4) return '';
+  return `${'*'.repeat(Math.max(0, digits.length - 4))}${digits.slice(-4)}`;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const token = request.cookies.get(STAFF_SESSION_COOKIE)?.value ?? '';
@@ -13,7 +19,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({success:true,profile:{
       id:snap.id, employeeCode:String(e.employeeCode||''), firstName:String(e.firstName||e.name||''), surname:String(e.surname||''),
       occupation:String(e.occupation||''), businessName:String(e.businessName||e.edoName||''), edoId:String(e.edoId||session.edoId||''),
-      idNumber:String(e.idNumber||''), cellphone:String(e.cellphone||e.cellphoneNumber||''), appointmentDate:String(e.appointmentDate||''),
+      idNumber:maskIdNumber(e.idNumber), cellphone:String(e.cellphone||e.cellphoneNumber||''), appointmentDate:String(e.appointmentDate||''),
       workWeek:String(e.workWeek||''), status:String(e.status||''), profilePhotoUrl:String(e.profilePhotoUrl||'')
     }});
   } catch(error){console.error('Staff profile load failed:',error);return NextResponse.json({success:false,message:'Unable to load your profile.'},{status:500})}
