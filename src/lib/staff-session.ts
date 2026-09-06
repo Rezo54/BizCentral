@@ -139,6 +139,9 @@ export async function validateStaffSession(
         snapshot.data();
 
     if (!data) {
+        await sessionRef
+            .delete()
+            .catch(() => undefined);
         return null;
     }
 
@@ -187,8 +190,47 @@ export async function validateStaffSession(
         !portalAccessId ||
         !authUid
     ) {
+        await sessionRef
+            .delete()
+            .catch(() => undefined);
         return null;
     }
+
+    // Revalidate the access record on every request so an administrative
+    // deactivation, deletion or identity relink revokes an existing session.
+    const accessSnapshot =
+        await adminDb
+            .collection('employeePortalAccess')
+            .doc(portalAccessId)
+            .get();
+
+    const accessData =
+        accessSnapshot.exists
+            ? accessSnapshot.data()
+            : undefined;
+
+    if (
+        !accessData ||
+        accessData.portalActivated !== true ||
+        accessData.employeeId !== employeeId ||
+        accessData.edoId !== edoId ||
+        accessData.authUid !== authUid
+    ) {
+        await sessionRef
+            .delete()
+            .catch(() => undefined);
+        return null;
+    }
+
+    await sessionRef
+        .set(
+            {
+                lastUsedAt:
+                    FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+        )
+        .catch(() => undefined);
 
     return {
         employeeId,

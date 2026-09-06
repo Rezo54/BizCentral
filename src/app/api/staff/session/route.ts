@@ -10,6 +10,7 @@ import {
 } from '@/lib/firebase-admin';
 
 import {
+    deleteStaffSession,
     STAFF_SESSION_COOKIE,
     validateStaffSession,
 } from '@/lib/staff-session';
@@ -86,33 +87,37 @@ export async function GET(
                 .doc(session.employeeId)
                 .get();
 
-        if (!employeeSnapshot.exists) {
-            return NextResponse.json(
-                {
-                    success: false,
-                    authenticated: false,
-                    message:
-                        'Employee record could not be found.',
-                },
-                {
-                    status: 401,
-                }
-            );
-        }
-
         const employee =
-            employeeSnapshot.data();
+            employeeSnapshot.exists
+                ? employeeSnapshot.data()
+                : undefined;
 
-        if (!employee) {
-            return NextResponse.json(
-                {
-                    success: false,
-                    authenticated: false,
-                },
-                {
-                    status: 401,
-                }
+        // A valid portal session must never outlive the employee record or
+        // continued employment. Revoke it rather than returning an active
+        // identity backed by a stale employee document.
+        if (
+            !employee ||
+            employee.status !== 'employed' ||
+            employee.edoId !== session.edoId
+        ) {
+            await deleteStaffSession(token);
+
+            const response =
+                NextResponse.json(
+                    {
+                        success: false,
+                        authenticated: false,
+                    },
+                    {
+                        status: 401,
+                    }
+                );
+
+            response.cookies.delete(
+                STAFF_SESSION_COOKIE
             );
+
+            return response;
         }
 
         // =================================================
