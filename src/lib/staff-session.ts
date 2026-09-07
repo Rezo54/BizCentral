@@ -196,17 +196,32 @@ export async function validateStaffSession(
         return null;
     }
 
-    // Revalidate the access record on every request so an administrative
-    // deactivation, deletion or identity relink revokes an existing session.
-    const accessSnapshot =
-        await adminDb
+    // Revalidate both the portal-access record and the underlying employee
+    // record on every protected request. This means an existing session is
+    // revoked immediately if portal access is disabled, the employee is
+    // terminated/deleted, or the employee is moved to another EDO.
+    const [
+        accessSnapshot,
+        employeeSnapshot,
+    ] = await Promise.all([
+        adminDb
             .collection('employeePortalAccess')
             .doc(portalAccessId)
-            .get();
+            .get(),
+        adminDb
+            .collection('employees')
+            .doc(employeeId)
+            .get(),
+    ]);
 
     const accessData =
         accessSnapshot.exists
             ? accessSnapshot.data()
+            : undefined;
+
+    const employeeData =
+        employeeSnapshot.exists
+            ? employeeSnapshot.data()
             : undefined;
 
     if (
@@ -214,7 +229,10 @@ export async function validateStaffSession(
         accessData.portalActivated !== true ||
         accessData.employeeId !== employeeId ||
         accessData.edoId !== edoId ||
-        accessData.authUid !== authUid
+        accessData.authUid !== authUid ||
+        !employeeData ||
+        employeeData.status !== 'employed' ||
+        employeeData.edoId !== edoId
     ) {
         await sessionRef
             .delete()

@@ -1,4 +1,4 @@
-// src/app/stafflogin/activate/page.tsx
+
 
 'use client';
 
@@ -296,6 +296,11 @@ export default function EmployeeActivatePage() {
       RecaptchaVerifier | null
     >(null);
 
+  const [
+    recaptchaContainerKey,
+    setRecaptchaContainerKey,
+  ] = useState(0);
+
   // =====================================================
   // FORMS
   // =====================================================
@@ -346,25 +351,25 @@ export default function EmployeeActivatePage() {
     const verifier =
       recaptchaVerifierRef.current;
 
+    // Drop our reference before clearing. If Firebase invokes an expiry/error
+    // callback during cleanup, a second cleanup cannot reuse this verifier.
+    recaptchaVerifierRef.current =
+      null;
+
     if (verifier) {
       try {
         verifier.clear();
       } catch {
         // Cleanup failure is non-fatal.
       }
-
-      recaptchaVerifierRef.current =
-        null;
     }
 
-    const container =
-      document.getElementById(
-        'recaptcha-container'
-      );
-
-    if (container) {
-      container.innerHTML = '';
-    }
+    // Firebase/Google can retain widget bookkeeping against the DOM element
+    // even after verifier.clear(). Force React to create a fresh container
+    // before the next phone-auth attempt.
+    setRecaptchaContainerKey(
+      (current) => current + 1
+    );
   }
 
   function getRecaptchaVerifier() {
@@ -386,8 +391,6 @@ export default function EmployeeActivatePage() {
         'The security verification service is unavailable. Please refresh the page and try again.'
       );
     }
-
-    container.innerHTML = '';
 
     const verifier =
       new RecaptchaVerifier(
@@ -484,7 +487,7 @@ export default function EmployeeActivatePage() {
       if (!response.ok) {
         throw new Error(
           result.message ||
-            'Unable to verify employee details.'
+          'Unable to verify employee details.'
         );
       }
 
@@ -493,7 +496,7 @@ export default function EmployeeActivatePage() {
       ) {
         throw new Error(
           result.message ||
-            'Unable to verify employee details.'
+          'Unable to verify employee details.'
         );
       }
 
@@ -560,7 +563,7 @@ export default function EmployeeActivatePage() {
         'Unable to verify your employee details.';
 
       switch (
-        firebaseError.code
+      firebaseError.code
       ) {
         case 'auth/operation-not-allowed':
           message =
@@ -693,7 +696,7 @@ export default function EmployeeActivatePage() {
         'The verification code is incorrect or has expired.';
 
       switch (
-        firebaseError.code
+      firebaseError.code
       ) {
         case 'auth/invalid-verification-code':
           message =
@@ -790,160 +793,160 @@ export default function EmployeeActivatePage() {
 
   async function handleCreatePin(
     values: PinValues
-    ) {
+  ) {
     setIsLoading(true);
 
     try {
-        // =================================================
-        // CONFIRM FIREBASE AUTHENTICATION
-        // =================================================
+      // =================================================
+      // CONFIRM FIREBASE AUTHENTICATION
+      // =================================================
 
-        const firebaseUser =
+      const firebaseUser =
         auth.currentUser;
 
-        if (!firebaseUser) {
+      if (!firebaseUser) {
         throw new Error(
-            'Your verified authentication session is missing. Please restart account activation.'
+          'Your verified authentication session is missing. Please restart account activation.'
         );
-        }
+      }
 
-        if (
+      if (
         !verifiedAuthUid ||
         firebaseUser.uid !== verifiedAuthUid
-        ) {
+      ) {
         throw new Error(
-            'Your authentication session could not be verified. Please restart account activation.'
+          'Your authentication session could not be verified. Please restart account activation.'
         );
-        }
+      }
 
-        // =================================================
-        // GET FRESH FIREBASE ID TOKEN
-        //
-        // The server will independently verify this token.
-        // We do not send or trust a UID/cellphone supplied
-        // directly by the browser.
-        // =================================================
+      // =================================================
+      // GET FRESH FIREBASE ID TOKEN
+      //
+      // The server will independently verify this token.
+      // We do not send or trust a UID/cellphone supplied
+      // directly by the browser.
+      // =================================================
 
-        const idToken =
+      const idToken =
         await firebaseUser.getIdToken(
-            true
+          true
         );
 
-        // =================================================
-        // COMPLETE ACTIVATION SERVER-SIDE
-        //
-        // The server will:
-        // - verify the Firebase token
-        // - obtain verified UID + phone
-        // - locate the employeePortal record
-        // - bcrypt hash the PIN
-        // - link authUid
-        // - set portalActivated = true
-        // =================================================
+      // =================================================
+      // COMPLETE ACTIVATION SERVER-SIDE
+      //
+      // The server will:
+      // - verify the Firebase token
+      // - obtain verified UID + phone
+      // - locate the employeePortal record
+      // - bcrypt hash the PIN
+      // - link authUid
+      // - set portalActivated = true
+      // =================================================
 
-        const response =
+      const response =
         await fetch(
-            '/api/staff/activation/complete',
-            {
+          '/api/staff/activation/complete',
+          {
             method: 'POST',
 
             headers: {
-                'Content-Type':
+              'Content-Type':
                 'application/json',
             },
 
             body: JSON.stringify({
-                idToken,
-                pin: values.pin,
+              idToken,
+              pin: values.pin,
             }),
-            }
+          }
         );
 
-        const result =
+      const result =
         await readApiResponse(
-            response
+          response
         );
 
-        if (!response.ok) {
+      if (!response.ok) {
         throw new Error(
-            result.message ||
-            'Unable to activate your Employee Portal account.'
+          result.message ||
+          'Unable to activate your Employee Portal account.'
         );
-        }
+      }
 
-        if (
+      if (
         result.success !== true
-        ) {
+      ) {
         throw new Error(
-            result.message ||
-            'Unable to activate your Employee Portal account.'
+          result.message ||
+          'Unable to activate your Employee Portal account.'
         );
-        }
+      }
 
-        // =================================================
-        // SUCCESS
-        //
-        // Only show completion AFTER the server confirms
-        // that the employeePortal record was updated.
-        // =================================================
+      // =================================================
+      // SUCCESS
+      //
+      // Only show completion AFTER the server confirms
+      // that the employeePortal record was updated.
+      // =================================================
 
-        pinForm.reset({
+      pinForm.reset({
         pin: '',
         confirmPin: '',
-        });
+      });
 
-        setShowPin(false);
-        setShowConfirmPin(false);
+      setShowPin(false);
+      setShowConfirmPin(false);
 
-        setStep('complete');
+      setStep('complete');
 
-        toast({
+      toast({
         title:
-            'Account Activated',
+          'Account Activated',
 
         description:
-            'Your Employee Portal account has been activated successfully.',
-        });
+          'Your Employee Portal account has been activated successfully.',
+      });
     } catch (error: unknown) {
-        const activationError =
+      const activationError =
         error as {
-            code?: string;
-            message?: string;
+          code?: string;
+          message?: string;
         };
 
-        let message =
+      let message =
         activationError.message ||
         'Unable to complete Employee Portal activation.';
 
-        if (
+      if (
         activationError.code ===
         'auth/network-request-failed'
-        ) {
+      ) {
         message =
-            'A network error occurred. Check your connection and try again.';
-        }
+          'A network error occurred. Check your connection and try again.';
+      }
 
-        if (
+      if (
         activationError.code ===
         'auth/user-token-expired'
-        ) {
+      ) {
         message =
-            'Your verification session has expired. Please restart account activation.';
-        }
+          'Your verification session has expired. Please restart account activation.';
+      }
 
-        toast({
+      toast({
         variant: 'destructive',
 
         title:
-            'Activation Failed',
+          'Activation Failed',
 
         description:
-            message,
-        });
+          message,
+      });
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
-    }
+  }
 
   // =====================================================
   // UI
@@ -955,6 +958,7 @@ export default function EmployeeActivatePage() {
       {/* Firebase Phone Auth invisible reCAPTCHA */}
 
       <div
+        key={recaptchaContainerKey}
         id="recaptcha-container"
       />
 
@@ -983,47 +987,47 @@ export default function EmployeeActivatePage() {
 
           {step !==
             'complete' && (
-            <div className="mb-7">
+              <div className="mb-7">
 
-              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center justify-between text-xs">
 
-                <span
-                  className={
-                    step ===
-                    'identify'
-                      ? 'font-semibold text-primary'
-                      : 'text-muted-foreground'
-                  }
-                >
-                  Verify
-                </span>
+                  <span
+                    className={
+                      step ===
+                        'identify'
+                        ? 'font-semibold text-primary'
+                        : 'text-muted-foreground'
+                    }
+                  >
+                    Verify
+                  </span>
 
-                <span
-                  className={
-                    step ===
-                    'otp'
-                      ? 'font-semibold text-primary'
-                      : 'text-muted-foreground'
-                  }
-                >
-                  OTP
-                </span>
+                  <span
+                    className={
+                      step ===
+                        'otp'
+                        ? 'font-semibold text-primary'
+                        : 'text-muted-foreground'
+                    }
+                  >
+                    OTP
+                  </span>
 
-                <span
-                  className={
-                    step ===
-                    'create-pin'
-                      ? 'font-semibold text-primary'
-                      : 'text-muted-foreground'
-                  }
-                >
-                  Create PIN
-                </span>
+                  <span
+                    className={
+                      step ===
+                        'create-pin'
+                        ? 'font-semibold text-primary'
+                        : 'text-muted-foreground'
+                    }
+                  >
+                    Create PIN
+                  </span>
+
+                </div>
 
               </div>
-
-            </div>
-          )}
+            )}
 
           {/* =================================================
               STEP 1
@@ -1032,123 +1036,123 @@ export default function EmployeeActivatePage() {
           {step ===
             'identify' && (
 
-            <Form
-              {...identifyForm}
-            >
-
-              <form
-                onSubmit={
-                  identifyForm.handleSubmit(
-                    handleIdentify
-                  )
-                }
-                className="space-y-5"
+              <Form
+                {...identifyForm}
               >
 
-                <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
-                  Enter the cellphone number registered
-                  against your employee record.
-                </div>
-
-                <FormField
-                  control={
-                    identifyForm.control
+                <form
+                  onSubmit={
+                    identifyForm.handleSubmit(
+                      handleIdentify
+                    )
                   }
-                  name="cellphone"
-                  render={({
-                    field,
-                  }) => (
-
-                    <FormItem>
-
-                      <FormLabel>
-                        Cellphone Number
-                      </FormLabel>
-
-                      <FormControl>
-
-                        <Input
-                          type="tel"
-                          inputMode="numeric"
-                          autoComplete="tel"
-                          placeholder="082 123 4567"
-                          {...field}
-                        />
-
-                      </FormControl>
-
-                      <FormMessage />
-
-                    </FormItem>
-
-                  )}
-                />
-
-                <FormField
-                  control={
-                    identifyForm.control
-                  }
-                  name="idLastSix"
-                  render={({
-                    field,
-                  }) => (
-
-                    <FormItem>
-
-                      <FormLabel>
-                        Last 6 digits of ID Number
-                      </FormLabel>
-
-                      <FormControl>
-
-                        <Input
-                          type="password"
-                          inputMode="numeric"
-                          autoComplete="off"
-                          maxLength={
-                            6
-                          }
-                          {...field}
-                          onChange={(
-                            event
-                          ) => {
-                            const value =
-                              event.target.value.replace(
-                                /\D/g,
-                                ''
-                              );
-
-                            field.onChange(
-                              value
-                            );
-                          }}
-                        />
-
-                      </FormControl>
-
-                      <FormMessage />
-
-                    </FormItem>
-
-                  )}
-                />
-
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={
-                    isLoading
-                  }
+                  className="space-y-5"
                 >
-                  {isLoading
-                    ? 'Checking...'
-                    : 'Continue'}
-                </Button>
 
-              </form>
+                  <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
+                    Enter the cellphone number registered
+                    against your employee record.
+                  </div>
 
-            </Form>
-          )}
+                  <FormField
+                    control={
+                      identifyForm.control
+                    }
+                    name="cellphone"
+                    render={({
+                      field,
+                    }) => (
+
+                      <FormItem>
+
+                        <FormLabel>
+                          Cellphone Number
+                        </FormLabel>
+
+                        <FormControl>
+
+                          <Input
+                            type="tel"
+                            inputMode="numeric"
+                            autoComplete="tel"
+                            placeholder="082 123 4567"
+                            {...field}
+                          />
+
+                        </FormControl>
+
+                        <FormMessage />
+
+                      </FormItem>
+
+                    )}
+                  />
+
+                  <FormField
+                    control={
+                      identifyForm.control
+                    }
+                    name="idLastSix"
+                    render={({
+                      field,
+                    }) => (
+
+                      <FormItem>
+
+                        <FormLabel>
+                          Last 6 digits of ID Number
+                        </FormLabel>
+
+                        <FormControl>
+
+                          <Input
+                            type="password"
+                            inputMode="numeric"
+                            autoComplete="off"
+                            maxLength={
+                              6
+                            }
+                            {...field}
+                            onChange={(
+                              event
+                            ) => {
+                              const value =
+                                event.target.value.replace(
+                                  /\D/g,
+                                  ''
+                                );
+
+                              field.onChange(
+                                value
+                              );
+                            }}
+                          />
+
+                        </FormControl>
+
+                        <FormMessage />
+
+                      </FormItem>
+
+                    )}
+                  />
+
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={
+                      isLoading
+                    }
+                  >
+                    {isLoading
+                      ? 'Checking...'
+                      : 'Continue'}
+                  </Button>
+
+                </form>
+
+              </Form>
+            )}
 
           {/* =================================================
               STEP 2 - OTP
@@ -1157,129 +1161,129 @@ export default function EmployeeActivatePage() {
           {step ===
             'otp' && (
 
-            <Form
-              {...otpForm}
-            >
-
-              <form
-                onSubmit={
-                  otpForm.handleSubmit(
-                    handleOtp
-                  )
-                }
-                className="space-y-5"
+              <Form
+                {...otpForm}
               >
 
-                <div className="text-center">
-
-                  <p className="text-sm text-muted-foreground">
-                    Enter the 6-digit verification code sent to
-                  </p>
-
-                  <p className="mt-1 font-medium">
-                    {displayCellphone(
-                      cellphone
-                    )}
-                  </p>
-
-                </div>
-
-                <FormField
-                  control={
-                    otpForm.control
+                <form
+                  onSubmit={
+                    otpForm.handleSubmit(
+                      handleOtp
+                    )
                   }
-                  name="otp"
-                  render={({
-                    field,
-                  }) => (
-
-                    <FormItem>
-
-                      <FormLabel>
-                        Verification Code
-                      </FormLabel>
-
-                      <FormControl>
-
-                        <Input
-                          inputMode="numeric"
-                          autoComplete="one-time-code"
-                          maxLength={
-                            6
-                          }
-                          className="text-center text-lg tracking-[0.4em]"
-                          placeholder="000000"
-                          {...field}
-                          onChange={(
-                            event
-                          ) => {
-                            const value =
-                              event.target.value.replace(
-                                /\D/g,
-                                ''
-                              );
-
-                            field.onChange(
-                              value
-                            );
-                          }}
-                        />
-
-                      </FormControl>
-
-                      <FormMessage />
-
-                    </FormItem>
-
-                  )}
-                />
-
-                <div className="flex items-center justify-between text-sm">
-
-                  <button
-                    type="button"
-                    onClick={
-                      handleChangeNumber
-                    }
-                    disabled={
-                      isLoading
-                    }
-                    className="text-muted-foreground hover:underline disabled:opacity-50"
-                  >
-                    ← Change number
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={
-                      handleResendOtp
-                    }
-                    disabled={
-                      isLoading
-                    }
-                    className="text-blue-600 hover:underline disabled:opacity-50"
-                  >
-                    Resend OTP
-                  </button>
-
-                </div>
-
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={
-                    isLoading
-                  }
+                  className="space-y-5"
                 >
-                  {isLoading
-                    ? 'Verifying...'
-                    : 'Verify OTP'}
-                </Button>
 
-              </form>
+                  <div className="text-center">
 
-            </Form>
-          )}
+                    <p className="text-sm text-muted-foreground">
+                      Enter the 6-digit verification code sent to
+                    </p>
+
+                    <p className="mt-1 font-medium">
+                      {displayCellphone(
+                        cellphone
+                      )}
+                    </p>
+
+                  </div>
+
+                  <FormField
+                    control={
+                      otpForm.control
+                    }
+                    name="otp"
+                    render={({
+                      field,
+                    }) => (
+
+                      <FormItem>
+
+                        <FormLabel>
+                          Verification Code
+                        </FormLabel>
+
+                        <FormControl>
+
+                          <Input
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            maxLength={
+                              6
+                            }
+                            className="text-center text-lg tracking-[0.4em]"
+                            placeholder="000000"
+                            {...field}
+                            onChange={(
+                              event
+                            ) => {
+                              const value =
+                                event.target.value.replace(
+                                  /\D/g,
+                                  ''
+                                );
+
+                              field.onChange(
+                                value
+                              );
+                            }}
+                          />
+
+                        </FormControl>
+
+                        <FormMessage />
+
+                      </FormItem>
+
+                    )}
+                  />
+
+                  <div className="flex items-center justify-between text-sm">
+
+                    <button
+                      type="button"
+                      onClick={
+                        handleChangeNumber
+                      }
+                      disabled={
+                        isLoading
+                      }
+                      className="text-muted-foreground hover:underline disabled:opacity-50"
+                    >
+                      ← Change number
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={
+                        handleResendOtp
+                      }
+                      disabled={
+                        isLoading
+                      }
+                      className="text-blue-600 hover:underline disabled:opacity-50"
+                    >
+                      Resend OTP
+                    </button>
+
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={
+                      isLoading
+                    }
+                  >
+                    {isLoading
+                      ? 'Verifying...'
+                      : 'Verify OTP'}
+                  </Button>
+
+                </form>
+
+              </Form>
+            )}
 
           {/* =================================================
               STEP 3 - CREATE PIN
@@ -1288,190 +1292,190 @@ export default function EmployeeActivatePage() {
           {step ===
             'create-pin' && (
 
-            <Form
-              {...pinForm}
-            >
-
-              <form
-                onSubmit={
-                  pinForm.handleSubmit(
-                    handleCreatePin
-                  )
-                }
-                className="space-y-5"
+              <Form
+                {...pinForm}
               >
 
-                <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
-                  Choose a 6-digit PIN for your
-                  Employee Portal account.
-                </div>
-
-                <FormField
-                  control={
-                    pinForm.control
+                <form
+                  onSubmit={
+                    pinForm.handleSubmit(
+                      handleCreatePin
+                    )
                   }
-                  name="pin"
-                  render={({
-                    field,
-                  }) => (
-
-                    <FormItem>
-
-                      <FormLabel>
-                        Create PIN
-                      </FormLabel>
-
-                      <FormControl>
-
-                        <div className="relative">
-
-                          <Input
-                            type={
-                              showPin
-                                ? 'text'
-                                : 'password'
-                            }
-                            inputMode="numeric"
-                            autoComplete="new-password"
-                            maxLength={
-                              6
-                            }
-                            placeholder="••••••"
-                            {...field}
-                            onChange={(
-                              event
-                            ) => {
-                              const value =
-                                event.target.value.replace(
-                                  /\D/g,
-                                  ''
-                                );
-
-                              field.onChange(
-                                value
-                              );
-                            }}
-                          />
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setShowPin(
-                                (
-                                  current
-                                ) =>
-                                  !current
-                              )
-                            }
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
-                          >
-                            {showPin
-                              ? 'Hide'
-                              : 'Show'}
-                          </button>
-
-                        </div>
-
-                      </FormControl>
-
-                      <FormMessage />
-
-                    </FormItem>
-
-                  )}
-                />
-
-                <FormField
-                  control={
-                    pinForm.control
-                  }
-                  name="confirmPin"
-                  render={({
-                    field,
-                  }) => (
-
-                    <FormItem>
-
-                      <FormLabel>
-                        Confirm PIN
-                      </FormLabel>
-
-                      <FormControl>
-
-                        <div className="relative">
-
-                          <Input
-                            type={
-                              showConfirmPin
-                                ? 'text'
-                                : 'password'
-                            }
-                            inputMode="numeric"
-                            autoComplete="new-password"
-                            maxLength={
-                              6
-                            }
-                            placeholder="••••••"
-                            {...field}
-                            onChange={(
-                              event
-                            ) => {
-                              const value =
-                                event.target.value.replace(
-                                  /\D/g,
-                                  ''
-                                );
-
-                              field.onChange(
-                                value
-                              );
-                            }}
-                          />
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setShowConfirmPin(
-                                (
-                                  current
-                                ) =>
-                                  !current
-                              )
-                            }
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
-                          >
-                            {showConfirmPin
-                              ? 'Hide'
-                              : 'Show'}
-                          </button>
-
-                        </div>
-
-                      </FormControl>
-
-                      <FormMessage />
-
-                    </FormItem>
-
-                  )}
-                />
-
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={
-                    isLoading
-                  }
+                  className="space-y-5"
                 >
-                  {isLoading
-                    ? 'Activating...'
-                    : 'Activate Account'}
-                </Button>
 
-              </form>
+                  <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
+                    Choose a 6-digit PIN for your
+                    Employee Portal account.
+                  </div>
 
-            </Form>
-          )}
+                  <FormField
+                    control={
+                      pinForm.control
+                    }
+                    name="pin"
+                    render={({
+                      field,
+                    }) => (
+
+                      <FormItem>
+
+                        <FormLabel>
+                          Create PIN
+                        </FormLabel>
+
+                        <FormControl>
+
+                          <div className="relative">
+
+                            <Input
+                              type={
+                                showPin
+                                  ? 'text'
+                                  : 'password'
+                              }
+                              inputMode="numeric"
+                              autoComplete="new-password"
+                              maxLength={
+                                6
+                              }
+                              placeholder="••••••"
+                              {...field}
+                              onChange={(
+                                event
+                              ) => {
+                                const value =
+                                  event.target.value.replace(
+                                    /\D/g,
+                                    ''
+                                  );
+
+                                field.onChange(
+                                  value
+                                );
+                              }}
+                            />
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setShowPin(
+                                  (
+                                    current
+                                  ) =>
+                                    !current
+                                )
+                              }
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
+                            >
+                              {showPin
+                                ? 'Hide'
+                                : 'Show'}
+                            </button>
+
+                          </div>
+
+                        </FormControl>
+
+                        <FormMessage />
+
+                      </FormItem>
+
+                    )}
+                  />
+
+                  <FormField
+                    control={
+                      pinForm.control
+                    }
+                    name="confirmPin"
+                    render={({
+                      field,
+                    }) => (
+
+                      <FormItem>
+
+                        <FormLabel>
+                          Confirm PIN
+                        </FormLabel>
+
+                        <FormControl>
+
+                          <div className="relative">
+
+                            <Input
+                              type={
+                                showConfirmPin
+                                  ? 'text'
+                                  : 'password'
+                              }
+                              inputMode="numeric"
+                              autoComplete="new-password"
+                              maxLength={
+                                6
+                              }
+                              placeholder="••••••"
+                              {...field}
+                              onChange={(
+                                event
+                              ) => {
+                                const value =
+                                  event.target.value.replace(
+                                    /\D/g,
+                                    ''
+                                  );
+
+                                field.onChange(
+                                  value
+                                );
+                              }}
+                            />
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setShowConfirmPin(
+                                  (
+                                    current
+                                  ) =>
+                                    !current
+                                )
+                              }
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
+                            >
+                              {showConfirmPin
+                                ? 'Hide'
+                                : 'Show'}
+                            </button>
+
+                          </div>
+
+                        </FormControl>
+
+                        <FormMessage />
+
+                      </FormItem>
+
+                    )}
+                  />
+
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={
+                      isLoading
+                    }
+                  >
+                    {isLoading
+                      ? 'Activating...'
+                      : 'Activate Account'}
+                  </Button>
+
+                </form>
+
+              </Form>
+            )}
 
           {/* =================================================
               COMPLETE
@@ -1480,37 +1484,37 @@ export default function EmployeeActivatePage() {
           {step ===
             'complete' && (
 
-            <div className="space-y-5 text-center">
+              <div className="space-y-5 text-center">
 
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-2xl">
-                ✓
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-2xl">
+                  ✓
+                </div>
+
+                <div>
+
+                  <h2 className="text-xl font-semibold">
+                    Account Activated
+                  </h2>
+
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Your Employee Portal account has been
+                    activated successfully.
+                  </p>
+
+                </div>
+
+                <Link
+                  href="/stafflogin"
+                >
+
+                  <Button className="w-full">
+                    Continue to Login
+                  </Button>
+
+                </Link>
+
               </div>
-
-              <div>
-
-                <h2 className="text-xl font-semibold">
-                  Account Activated
-                </h2>
-
-                <p className="mt-2 text-sm text-muted-foreground">
-                Your Employee Portal account has been
-                activated successfully.
-                </p>
-
-              </div>
-
-              <Link
-                href="/stafflogin"
-              >
-
-                <Button className="w-full">
-                  Continue to Login
-                </Button>
-
-              </Link>
-
-            </div>
-          )}
+            )}
 
         </div>
 
@@ -1519,17 +1523,17 @@ export default function EmployeeActivatePage() {
         {step !==
           'complete' && (
 
-          <div className="mt-5 text-center">
+            <div className="mt-5 text-center">
 
-            <Link
-              href="/stafflogin"
-              className="text-sm text-muted-foreground hover:text-foreground hover:underline"
-            >
-              ← Back to Employee Login
-            </Link>
+              <Link
+                href="/stafflogin"
+                className="text-sm text-muted-foreground hover:text-foreground hover:underline"
+              >
+                ← Back to Employee Login
+              </Link>
 
-          </div>
-        )}
+            </div>
+          )}
 
       </div>
 

@@ -1,4 +1,4 @@
-// src/app/api/staff/activation/check/route.ts
+
 
 import { NextResponse } from 'next/server';
 
@@ -179,18 +179,6 @@ export async function POST(
               ? portalSnap.data()
               : undefined;
 
-          if (
-            portalData?.portalActivated === true
-          ) {
-            return {
-              allowed: false,
-              code: 'ALREADY_ACTIVATED',
-              status: 409,
-              message:
-                'Your Employee Portal account is already activated. Please login or use Forgot PIN.',
-            };
-          }
-
           // =============================================
           // ID VERIFICATION BRUTE-FORCE CONTROL
           // =============================================
@@ -202,12 +190,16 @@ export async function POST(
             idBlockedUntil instanceof Timestamp &&
             idBlockedUntil.toMillis() > now.toMillis()
           ) {
+            // Keep the internal lockout, but expose the same generic response
+            // as an ordinary failed identity check. This prevents callers from
+            // using the lockout response to confirm that a cellphone belongs
+            // to a real employee.
             return {
               allowed: false,
-              code: 'VERIFICATION_BLOCKED',
-              status: 429,
+              code: 'VERIFICATION_FAILED',
+              status: 400,
               message:
-                'Too many verification attempts. Please try again later.',
+                'We could not verify your employee details. Please check the information entered or contact your administrator.',
             };
           }
 
@@ -225,7 +217,7 @@ export async function POST(
               now.toMillis() -
               idVerifyWindowStartedAt.toMillis()
             ) >
-              ID_VERIFY_WINDOW_MINUTES * 60 * 1000;
+            ID_VERIFY_WINDOW_MINUTES * 60 * 1000;
 
           if (idWindowExpired) {
             idVerifyFailureCount = 0;
@@ -256,10 +248,10 @@ export async function POST(
                 idVerifyBlockedUntil:
                   shouldBlock
                     ? Timestamp.fromMillis(
-                        now.toMillis() +
-                        ID_VERIFY_BLOCK_MINUTES *
-                          60 * 1000
-                      )
+                      now.toMillis() +
+                      ID_VERIFY_BLOCK_MINUTES *
+                      60 * 1000
+                    )
                     : null,
                 lastIdVerifyFailedAt: now,
                 updatedAt:
@@ -268,9 +260,9 @@ export async function POST(
                   portalSnap.exists
                     ? {}
                     : {
-                        createdAt:
-                          FieldValue.serverTimestamp(),
-                      }
+                      createdAt:
+                        FieldValue.serverTimestamp(),
+                    }
                 ),
               },
               { merge: true }
@@ -278,22 +270,30 @@ export async function POST(
 
             return {
               allowed: false,
-              code:
-                shouldBlock
-                  ? 'VERIFICATION_BLOCKED'
-                  : 'VERIFICATION_FAILED',
-              status:
-                shouldBlock ? 429 : 400,
+              code: 'VERIFICATION_FAILED',
+              status: 400,
               message:
-                shouldBlock
-                  ? 'Too many verification attempts. Please try again later.'
-                  : 'We could not verify your employee details. Please check the information entered or contact your administrator.',
+                'We could not verify your employee details. Please check the information entered or contact your administrator.',
             };
           }
 
           // A correct ID cannot bypass an existing block (checked above).
           // Once the block has expired, successful verification clears the
           // failed-identity state before normal OTP throttling proceeds.
+
+          // Only reveal activation state after the employee has
+          // successfully proved identity with the correct ID suffix.
+          if (
+            portalData?.portalActivated === true
+          ) {
+            return {
+              allowed: false,
+              code: 'ALREADY_ACTIVATED',
+              status: 409,
+              message:
+                'Your Employee Portal account is already activated. Please login or use Forgot PIN.',
+            };
+          }
 
           const blockedUntil =
             portalData?.otpBlockedUntil;
@@ -351,7 +351,7 @@ export async function POST(
               now.toMillis() -
               otpWindowStartedAt.toMillis()
             ) >
-              OTP_WINDOW_MINUTES * 60 * 1000;
+            OTP_WINDOW_MINUTES * 60 * 1000;
 
           if (otpWindowExpired) {
             otpRequestCount = 0;
@@ -366,7 +366,7 @@ export async function POST(
               Timestamp.fromMillis(
                 now.toMillis() +
                 OTP_BLOCK_MINUTES *
-                  60 * 1000
+                60 * 1000
               );
 
             transaction.set(
@@ -402,7 +402,7 @@ export async function POST(
               now.toMillis() -
               otpDailyStartedAt.toMillis()
             ) >
-              24 * 60 * 60 * 1000;
+            24 * 60 * 60 * 1000;
 
           if (dailyWindowExpired) {
             otpDailyCount = 0;
@@ -454,9 +454,9 @@ export async function POST(
                 portalSnap.exists
                   ? {}
                   : {
-                      createdAt:
-                        FieldValue.serverTimestamp(),
-                    }
+                    createdAt:
+                      FieldValue.serverTimestamp(),
+                  }
               ),
             },
             { merge: true }
