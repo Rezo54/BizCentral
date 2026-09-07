@@ -139,6 +139,9 @@ export async function validateStaffSession(
         snapshot.data();
 
     if (!data) {
+        await sessionRef
+            .delete()
+            .catch(() => undefined);
         return null;
     }
 
@@ -187,8 +190,65 @@ export async function validateStaffSession(
         !portalAccessId ||
         !authUid
     ) {
+        await sessionRef
+            .delete()
+            .catch(() => undefined);
         return null;
     }
+
+    // Revalidate both the portal-access record and the underlying employee
+    // record on every protected request. This means an existing session is
+    // revoked immediately if portal access is disabled, the employee is
+    // terminated/deleted, or the employee is moved to another EDO.
+    const [
+        accessSnapshot,
+        employeeSnapshot,
+    ] = await Promise.all([
+        adminDb
+            .collection('employeePortalAccess')
+            .doc(portalAccessId)
+            .get(),
+        adminDb
+            .collection('employees')
+            .doc(employeeId)
+            .get(),
+    ]);
+
+    const accessData =
+        accessSnapshot.exists
+            ? accessSnapshot.data()
+            : undefined;
+
+    const employeeData =
+        employeeSnapshot.exists
+            ? employeeSnapshot.data()
+            : undefined;
+
+    if (
+        !accessData ||
+        accessData.portalActivated !== true ||
+        accessData.employeeId !== employeeId ||
+        accessData.edoId !== edoId ||
+        accessData.authUid !== authUid ||
+        !employeeData ||
+        employeeData.status !== 'employed' ||
+        employeeData.edoId !== edoId
+    ) {
+        await sessionRef
+            .delete()
+            .catch(() => undefined);
+        return null;
+    }
+
+    await sessionRef
+        .set(
+            {
+                lastUsedAt:
+                    FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+        )
+        .catch(() => undefined);
 
     return {
         employeeId,
