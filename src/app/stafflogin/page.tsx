@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
@@ -32,7 +32,6 @@ const SUSPENDED_MESSAGE =
 export default function EmployeeLoginPage() {
   const { toast } = useToast();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [showPin, setShowPin] = useState(false);
 
@@ -41,15 +40,19 @@ export default function EmployeeLoginPage() {
     defaultValues: { cellphone: '', pin: '' },
   });
 
+  // Read the suspension reason in the browser rather than useSearchParams().
+  // This keeps /stafflogin compatible with Next.js static generation while
+  // preserving the redirect message for a revoked staff session.
   useEffect(() => {
-    if (searchParams.get('reason') !== 'suspended') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('reason') !== 'suspended') return;
     toast({
       variant: 'destructive',
       title: 'Account Suspended',
       description: SUSPENDED_MESSAGE,
     });
-    router.replace('/stafflogin');
-  }, [router, searchParams, toast]);
+    window.history.replaceState(null, '', '/stafflogin');
+  }, [toast]);
 
   async function onSubmit(values: FormValues) {
     setIsLoading(true);
