@@ -224,12 +224,25 @@ export async function validateStaffSession(
             ? employeeSnapshot.data()
             : undefined;
 
+    const sessionCreatedAt =
+        data.createdAt;
+
+    const pinChangedAt =
+        accessData?.pinChangedAt;
+
+    const revokedByPinChange =
+        pinChangedAt instanceof Timestamp &&
+        (!(sessionCreatedAt instanceof Timestamp) ||
+            sessionCreatedAt.toMillis() <=
+            pinChangedAt.toMillis());
+
     if (
         !accessData ||
         accessData.portalActivated !== true ||
         accessData.employeeId !== employeeId ||
         accessData.edoId !== edoId ||
         accessData.authUid !== authUid ||
+        revokedByPinChange ||
         !employeeData ||
         employeeData.status !== 'employed' ||
         employeeData.edoId !== edoId
