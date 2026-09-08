@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { ConfirmationResult, RecaptchaVerifier, signInWithPhoneNumber, signOut } from 'firebase/auth';
@@ -176,6 +177,7 @@ export default function EmployeeActivatePage() {
       <div className="w-full max-w-md">
         <div key={recaptchaKey} id="recaptcha-container" />
         <div className="rounded-xl border bg-background p-6 shadow-sm">
+          <div className="mb-5 flex justify-center"><Image src="/logo.png" alt="Taskraft Solutions That Work" width={180} height={74} priority /></div>
           <h1 className="text-2xl font-bold">Activate Employee Account</h1>
           <p className="mt-2 text-sm text-muted-foreground">Set up access to your BizCentral Employee Portal</p>
           {step !== 'complete' && <div className="my-7 flex justify-between text-xs"><span className={step==='identify'?'font-semibold text-primary':'text-muted-foreground'}>Verify</span><span className={step==='otp'?'font-semibold text-primary':'text-muted-foreground'}>OTP</span><span className={step==='pin'?'font-semibold text-primary':'text-muted-foreground'}>Create PIN</span></div>}
