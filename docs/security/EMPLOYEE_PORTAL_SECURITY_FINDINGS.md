@@ -192,3 +192,37 @@ Existing authenticated employee-session scoping, EDO/employee storage path, priv
 ### Production changes
 
 NONE.
+
+
+---
+
+## EP-SEC-010 — Sensitive profile-change PIN confirmation lacked attempt throttling
+
+**Severity:** Medium  
+**Status:** Remediated on agent branch — human validation pending  
+**Scope:** `src/app/api/staff/profile/change-request/route.ts`
+
+### Finding
+
+A valid staff session is required before an employee can request a cellphone or ID-number change, and the route correctly requires the current six-digit PIN. However, repeated incorrect PIN confirmations on this sensitive endpoint were not independently throttled. A stolen unattended authenticated session could therefore make repeated online PIN guesses without using the login endpoint's lockout.
+
+### Remediation implemented
+
+The profile-change confirmation now tracks failed PIN confirmations on the employee portal-access record. Five incorrect attempts trigger a 15-minute block for profile-change PIN confirmation. A successful PIN confirmation clears the profile-change failure counter/block.
+
+The existing authenticated-session requirement, employee-derived identity, admin-approval workflow and no-direct-master-record-edit design are preserved.
+
+### Verification required
+
+1. Valid session + correct PIN + valid changed value — request succeeds.
+2. Incorrect PIN attempts 1–4 — rejected and counted.
+3. Fifth incorrect PIN — rejected and starts the 15-minute profile-change confirmation block.
+4. Further attempts during the block — rejected with 429 even with the correct PIN.
+5. After block expiry, correct PIN succeeds and clears the counter/block.
+6. Login lockout and profile-change lockout remain separate controls.
+7. Unauthenticated profile-change request remains rejected.
+8. Employee cannot choose another employee ID or EDO in the request.
+
+### Production changes
+
+NONE.
