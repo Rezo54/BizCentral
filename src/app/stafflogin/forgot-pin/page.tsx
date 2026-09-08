@@ -1,8 +1,9 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { ConfirmationResult, RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
+import { ConfirmationResult, RecaptchaVerifier, signInWithPhoneNumber, signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,7 +52,9 @@ export default function ForgotPinPage() {
     try {
       if (!confirmation.current || seconds <= 0) throw new Error('OTP session expired.');
       const credential = await confirmation.current.confirm(otp);
-      verifiedIdToken.current = await credential.user.getIdToken();
+      verifiedIdToken.current = await credential.user.getIdToken(true);
+      await signOut(auth);
+      confirmation.current = null;
       setSeconds(0);
       setStep(2);
     } catch { setMessage('The OTP is incorrect or expired.'); }
@@ -71,7 +74,7 @@ export default function ForgotPinPage() {
     finally { setBusy(false); }
   }
 
-  return <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4"><div className="w-full max-w-md rounded-xl border bg-background p-6 shadow-sm"><h1 className="text-2xl font-bold">Forgot PIN</h1><p className="mt-2 text-sm text-muted-foreground">Verify your cellphone before choosing a new PIN.</p><div className="mt-6 space-y-4">
+  return <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4"><div className="w-full max-w-md rounded-xl border bg-background p-6 shadow-sm"><div className="mb-5 flex justify-center"><Image src="/logo.png" alt="Taskraft Solutions That Work" width={180} height={74} priority /></div><h1 className="text-2xl font-bold">Forgot PIN</h1><p className="mt-2 text-sm text-muted-foreground">Verify your cellphone before choosing a new PIN.</p><div className="mt-6 space-y-4">
     {step===0&&<><Input type="tel" placeholder="082 123 4567" value={phone} onChange={e=>setPhone(e.target.value)}/><Button className="w-full" disabled={busy} onClick={start}>Send verification code</Button></>}
     {step===1&&<><div className="rounded-lg bg-muted/50 p-3 text-center text-sm"><span className="text-muted-foreground">Code expires in </span><span className="font-semibold tabular-nums">00:{String(seconds).padStart(2,'0')}</span></div><Input inputMode="numeric" maxLength={6} placeholder="6-digit OTP" value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,''))}/><Button className="w-full" disabled={busy||seconds<=0} onClick={verify}>Verify OTP</Button></>}
     {step===2&&<><Input type="password" inputMode="numeric" maxLength={6} placeholder="New 6-digit PIN" value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,''))}/><Input type="password" inputMode="numeric" maxLength={6} placeholder="Confirm PIN" value={confirmPin} onChange={e=>setConfirmPin(e.target.value.replace(/\D/g,''))}/><Button className="w-full" disabled={busy} onClick={finish}>Reset PIN</Button></>}

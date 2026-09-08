@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -54,6 +55,7 @@ export default function EmployeeLoginPage() {
   }
 
   return <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4"><div className="w-full max-w-md"><div className="rounded-xl border bg-background p-6 shadow-sm">
+    <div className="mb-5 flex justify-center"><Image src="/logo.png" alt="Taskraft Solutions That Work" width={180} height={74} priority /></div>
     <div className="mb-6 text-center"><h1 className="text-2xl font-bold">Employee Portal</h1><p className="mt-2 text-sm text-muted-foreground">Login using your cellphone number and PIN</p></div>
     <Form {...form}><form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
       <FormField control={form.control} name="cellphone" render={({field})=><FormItem><FormLabel>Cellphone Number</FormLabel><FormControl><Input type="tel" inputMode="tel" autoComplete="tel" placeholder="082 123 4567" {...field}/></FormControl><FormMessage/></FormItem>}/>
