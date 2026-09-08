@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { ConfirmationResult, RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
+import { ConfirmationResult, RecaptchaVerifier, signInWithPhoneNumber, signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,7 +51,9 @@ export default function ForgotPinPage() {
     try {
       if (!confirmation.current || seconds <= 0) throw new Error('OTP session expired.');
       const credential = await confirmation.current.confirm(otp);
-      verifiedIdToken.current = await credential.user.getIdToken();
+      verifiedIdToken.current = await credential.user.getIdToken(true);
+      await signOut(auth);
+      confirmation.current = null;
       setSeconds(0);
       setStep(2);
     } catch { setMessage('The OTP is incorrect or expired.'); }
