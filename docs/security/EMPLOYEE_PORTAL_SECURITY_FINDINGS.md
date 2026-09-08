@@ -124,3 +124,105 @@ The historical route is now closed and always returns a generic `404 Not found` 
 ### Production changes
 
 NONE.
+
+
+---
+
+## EP-SEC-008 — PIN reset must revoke pre-reset staff sessions fail-closed
+
+**Severity:** High  
+**Status:** Remediated on agent branch — human validation pending  
+**Scope:** `src/app/api/staff/reset-pin/*`, `src/lib/staff-session.ts`
+
+### Finding
+
+The Cycle 2 reset flow changes the PIN transactionally and then deletes existing `employeePortalSessions`. Session deletion is useful cleanup, but deletion alone is not a sufficient revocation boundary: if cleanup fails after the PIN transaction commits, an older session document could otherwise remain usable.
+
+### Remediation implemented
+
+PIN reset records `pinChangedAt` on the authoritative `employeePortalAccess` record. `validateStaffSession()` now rejects and deletes any session whose `createdAt` is missing or is at/before the latest `pinChangedAt`. This makes PIN-change revocation fail closed even if best-effort bulk session deletion fails.
+
+The existing session deletion after successful reset remains in place as cleanup. Existing Cycle 1 portal-access, employment-status and EDO-binding revalidation remains unchanged.
+
+### Verification required
+
+1. Login normally and confirm the existing session works before reset.
+2. Complete Forgot PIN with a valid SMS OTP and a new six-digit PIN.
+3. Confirm every browser/session established before the reset receives an unauthorised/expired-session result on its next protected Staff Portal request.
+4. Confirm login with the old PIN fails.
+5. Confirm a fresh login with the new PIN succeeds and creates a session newer than `pinChangedAt`.
+6. Confirm logout and normal seven-day session expiry behaviour remain unchanged.
+7. Confirm suspended, terminated, moved-EDO and portal-disabled accounts continue to lose access as in Cycle 1.
+
+### Production changes
+
+NONE.
+
+
+---
+
+## EP-SEC-009 — Leave supporting-document upload trusted browser MIME type
+
+**Severity:** Medium  
+**Status:** Remediated on agent branch — human validation pending  
+**Scope:** `src/app/api/staff/leave/document/route.ts`
+
+### Finding
+
+The authenticated Staff Portal leave-document endpoint enforced an allow-list of PDF/JPEG/PNG MIME types and an 8 MB limit, but accepted the browser-supplied `File.type` as proof of content type. A renamed or deliberately crafted file could therefore be stored under the employee leave-document path while claiming to be an allowed document type.
+
+### Remediation implemented
+
+The endpoint now reads the uploaded bytes before storage and verifies the expected PDF, JPEG or PNG file signature for the declared MIME type. Files whose content signature does not match the declared allowed type are rejected before Firebase Admin Storage is called.
+
+Existing authenticated employee-session scoping, EDO/employee storage path, private/no-store metadata and size/type limits are preserved.
+
+### Verification required
+
+1. Upload a genuine PDF smaller than 8 MB — accepted.
+2. Upload a genuine JPEG smaller than 8 MB — accepted.
+3. Upload a genuine PNG smaller than 8 MB — accepted.
+4. Rename a text/executable file to `.pdf` or submit it as `application/pdf` — rejected before storage.
+5. Submit non-JPEG bytes as `image/jpeg` — rejected.
+6. Submit non-PNG bytes as `image/png` — rejected.
+7. Submit an allowed valid file larger than 8 MB — rejected.
+8. Unauthenticated upload — rejected with 401.
+9. Confirm successful leave submission still references only the authenticated employee's scoped document path.
+
+### Production changes
+
+NONE.
+
+
+---
+
+## EP-SEC-010 — Sensitive profile-change PIN confirmation lacked attempt throttling
+
+**Severity:** Medium  
+**Status:** Remediated on agent branch — human validation pending  
+**Scope:** `src/app/api/staff/profile/change-request/route.ts`
+
+### Finding
+
+A valid staff session is required before an employee can request a cellphone or ID-number change, and the route correctly requires the current six-digit PIN. However, repeated incorrect PIN confirmations on this sensitive endpoint were not independently throttled. A stolen unattended authenticated session could therefore make repeated online PIN guesses without using the login endpoint's lockout.
+
+### Remediation implemented
+
+The profile-change confirmation now tracks failed PIN confirmations on the employee portal-access record. Five incorrect attempts trigger a 15-minute block for profile-change PIN confirmation. A successful PIN confirmation clears the profile-change failure counter/block.
+
+The existing authenticated-session requirement, employee-derived identity, admin-approval workflow and no-direct-master-record-edit design are preserved.
+
+### Verification required
+
+1. Valid session + correct PIN + valid changed value — request succeeds.
+2. Incorrect PIN attempts 1–4 — rejected and counted.
+3. Fifth incorrect PIN — rejected and starts the 15-minute profile-change confirmation block.
+4. Further attempts during the block — rejected with 429 even with the correct PIN.
+5. After block expiry, correct PIN succeeds and clears the counter/block.
+6. Login lockout and profile-change lockout remain separate controls.
+7. Unauthenticated profile-change request remains rejected.
+8. Employee cannot choose another employee ID or EDO in the request.
+
+### Production changes
+
+NONE.
