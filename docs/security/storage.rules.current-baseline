@@ -1,0 +1,41 @@
+// Firebase Storage rules confirmed unchanged/current by Benedict Mahlangu on 08/September/2026.
+// Saved as the authoritative current baseline for the BizCentral security audit.
+
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // =====================================================
+    // EMPLOYEE SUSPENSION DOCUMENTS
+    // =====================================================
+
+    match /suspensions/{employeeId}/{suspensionId}/{fileName} {
+
+      // Signed-in users only.
+      // Application + Firestore permissions restrict
+      // suspension management to Taskraft administrators.
+      allow read: if request.auth != null;
+
+      // Only signed-in users can attempt an upload.
+      // Restrict file size and accepted document formats.
+      allow create: if request.auth != null
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType in [
+          'application/pdf',
+          'image/jpeg',
+          'image/png'
+        ];
+
+      // Suspension documents form part of the audit record.
+      // Do not overwrite or delete an existing document.
+      allow update, delete: if false;
+    }
+
+    // Everything else remains locked unless we have
+    // explicitly created rules elsewhere.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
