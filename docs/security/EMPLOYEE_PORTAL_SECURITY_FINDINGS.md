@@ -157,3 +157,38 @@ The existing session deletion after successful reset remains in place as cleanup
 ### Production changes
 
 NONE.
+
+
+---
+
+## EP-SEC-009 — Leave supporting-document upload trusted browser MIME type
+
+**Severity:** Medium  
+**Status:** Remediated on agent branch — human validation pending  
+**Scope:** `src/app/api/staff/leave/document/route.ts`
+
+### Finding
+
+The authenticated Staff Portal leave-document endpoint enforced an allow-list of PDF/JPEG/PNG MIME types and an 8 MB limit, but accepted the browser-supplied `File.type` as proof of content type. A renamed or deliberately crafted file could therefore be stored under the employee leave-document path while claiming to be an allowed document type.
+
+### Remediation implemented
+
+The endpoint now reads the uploaded bytes before storage and verifies the expected PDF, JPEG or PNG file signature for the declared MIME type. Files whose content signature does not match the declared allowed type are rejected before Firebase Admin Storage is called.
+
+Existing authenticated employee-session scoping, EDO/employee storage path, private/no-store metadata and size/type limits are preserved.
+
+### Verification required
+
+1. Upload a genuine PDF smaller than 8 MB — accepted.
+2. Upload a genuine JPEG smaller than 8 MB — accepted.
+3. Upload a genuine PNG smaller than 8 MB — accepted.
+4. Rename a text/executable file to `.pdf` or submit it as `application/pdf` — rejected before storage.
+5. Submit non-JPEG bytes as `image/jpeg` — rejected.
+6. Submit non-PNG bytes as `image/png` — rejected.
+7. Submit an allowed valid file larger than 8 MB — rejected.
+8. Unauthenticated upload — rejected with 401.
+9. Confirm successful leave submission still references only the authenticated employee's scoped document path.
+
+### Production changes
+
+NONE.
