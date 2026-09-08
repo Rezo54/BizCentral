@@ -124,3 +124,36 @@ The historical route is now closed and always returns a generic `404 Not found` 
 ### Production changes
 
 NONE.
+
+
+---
+
+## EP-SEC-008 — PIN reset must revoke pre-reset staff sessions fail-closed
+
+**Severity:** High  
+**Status:** Remediated on agent branch — human validation pending  
+**Scope:** `src/app/api/staff/reset-pin/*`, `src/lib/staff-session.ts`
+
+### Finding
+
+The Cycle 2 reset flow changes the PIN transactionally and then deletes existing `employeePortalSessions`. Session deletion is useful cleanup, but deletion alone is not a sufficient revocation boundary: if cleanup fails after the PIN transaction commits, an older session document could otherwise remain usable.
+
+### Remediation implemented
+
+PIN reset records `pinChangedAt` on the authoritative `employeePortalAccess` record. `validateStaffSession()` now rejects and deletes any session whose `createdAt` is missing or is at/before the latest `pinChangedAt`. This makes PIN-change revocation fail closed even if best-effort bulk session deletion fails.
+
+The existing session deletion after successful reset remains in place as cleanup. Existing Cycle 1 portal-access, employment-status and EDO-binding revalidation remains unchanged.
+
+### Verification required
+
+1. Login normally and confirm the existing session works before reset.
+2. Complete Forgot PIN with a valid SMS OTP and a new six-digit PIN.
+3. Confirm every browser/session established before the reset receives an unauthorised/expired-session result on its next protected Staff Portal request.
+4. Confirm login with the old PIN fails.
+5. Confirm a fresh login with the new PIN succeeds and creates a session newer than `pinChangedAt`.
+6. Confirm logout and normal seven-day session expiry behaviour remain unchanged.
+7. Confirm suspended, terminated, moved-EDO and portal-disabled accounts continue to lose access as in Cycle 1.
+
+### Production changes
+
+NONE.
