@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { ConfirmationResult, RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
+import { ConfirmationResult, RecaptchaVerifier, signInWithPhoneNumber, signOut } from 'firebase/auth';
 
 import { auth } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
@@ -38,7 +38,7 @@ export default function EmployeeActivatePage() {
   const [recaptchaKey, setRecaptchaKey] = useState(0);
   const confirmationRef = useRef<ConfirmationResult | null>(null);
   const verifierRef = useRef<RecaptchaVerifier | null>(null);
-  const verifiedAuthUidRef = useRef('');
+  const verifiedIdTokenRef = useRef('');
 
   function clearVerifier() {
     const verifier = verifierRef.current;
@@ -61,7 +61,7 @@ export default function EmployeeActivatePage() {
 
   function restartVerification(showMessage = false) {
     confirmationRef.current = null;
-    verifiedAuthUidRef.current = '';
+    verifiedIdTokenRef.current = '';
     setOtp('');
     setSeconds(0);
     setVerifiedPhone('');
@@ -134,7 +134,8 @@ export default function EmployeeActivatePage() {
     try {
       const credential = await confirmationRef.current.confirm(otp);
       if (!credential.user.uid) throw new Error('Unable to verify your cellphone.');
-      verifiedAuthUidRef.current = credential.user.uid;
+      verifiedIdTokenRef.current = await credential.user.getIdToken(true);
+      await signOut(auth);
       confirmationRef.current = null;
       setSeconds(0);
       clearVerifier();
@@ -155,14 +156,14 @@ export default function EmployeeActivatePage() {
     }
     setLoading(true);
     try {
-      const user = auth.currentUser;
-      if (!user || !verifiedAuthUidRef.current || user.uid !== verifiedAuthUidRef.current) throw new Error('Your verification session is missing. Please restart account activation.');
-      const idToken = await user.getIdToken(true);
+      const idToken = verifiedIdTokenRef.current;
+      if (!idToken) throw new Error('Your verification session is missing. Please restart account activation.');
       const response = await fetch('/api/staff/activation/complete', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken, pin }),
       });
       const result = await readApi(response);
       if (!response.ok || result.success !== true) throw new Error(result.message || 'Unable to activate your Employee Portal account.');
+      verifiedIdTokenRef.current = '';
       setPin(''); setConfirmPin(''); setStep('complete');
       toast({ title: 'Account Activated', description: 'Your Employee Portal account has been activated successfully.' });
     } catch (error: unknown) {
