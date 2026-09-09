@@ -1,0 +1,14 @@
+{
+  "firestore": {
+    "rules": "../../docs/security/firestore.rules.candidate-gate-1-userAccess"
+  },
+  "emulators": {
+    "firestore": {
+      "host": "127.0.0.1",
+      "port": 8089
+    },
+    "ui": {
+      "enabled": false
+    }
+  }
+}
