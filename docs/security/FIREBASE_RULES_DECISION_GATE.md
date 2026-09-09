@@ -36,7 +36,7 @@ For each collection/path:
 
 ## Gate 1 — `userAccess` client writes
 
-**Status: READY TO PREPARE CANDIDATE RULE; NOT APPROVED FOR PRODUCTION DEPLOYMENT.**
+**Status: CANDIDATE RULE PREPARED; STATICALLY VERIFIED; RUNTIME EMULATOR VALIDATION PENDING; NOT APPROVED FOR PRODUCTION DEPLOYMENT.**
 
 Verified lifecycle mutations:
 
@@ -65,6 +65,67 @@ Verified lifecycle mutations:
 - cross-user/cross-company mutation fails.
 
 Only after these tests pass against the candidate configuration and Benedict explicitly approves the production change may Gate 1 be applied to Firebase.
+
+## Gate 1 test-environment preparation
+
+A test-only Firebase Emulator configuration now exists at `docs/security/firebase.gate1-emulator.json`.
+
+- It targets the demo project ID `demo-bizcentral-rules`, not the production Firebase project.
+- It loads the Gate 1 candidate rules for the named `biz-central` Firestore database.
+- It starts only local Auth and Firestore emulators.
+- It does not contain production credentials or deployment configuration.
+- Root `firebase.json` / `.firebaserc` were deliberately not modified after the platform safety guard blocked that approach.
+
+The preferred automated runner is a local `@firebase/rules-unit-testing` suite because Firebase documents that this library can create authenticated rule-test contexts and bypass rules only for fixture setup. The executable test-runner write was blocked by platform safety controls in this audit cycle, so runtime results are not claimed.
+
+**Gate 1 human test gate is therefore NOT YET OPEN.** Static evidence is complete; the remaining requirement is an executable local rules test (or equivalent explicitly approved emulator validation) that proves the candidate deny/allow matrix before any live-rule change.
+
+## Residual dependency map — verified 9 September 2026
+
+### `invoices`
+
+Direct browser reads remain in at least two legitimate BizCentral surfaces:
+
+- the main dashboard reads pending invoices directly from Firestore;
+- the reliever invoice approval page reads the full `invoices` collection directly, then filters in the browser.
+
+Invoice decision mutations already use the protected server API, but **broad client read cannot yet be retired**. Migrating these non-Employee-Portal pages is outside the current autonomous mandate.
+
+### `users`
+
+Residual browser dependencies remain:
+
+- `src/data/users.ts` still contains direct profile create/get/list/approve helpers against `users`;
+- `src/data/edo-routes.ts` lists `users` to derive EDO company options.
+
+Therefore `users` list/update/create permissions are **not ready for retirement**. Before a rules gate, all live consumers of these helpers must be verified and migrated or explicitly retired.
+
+### `attendanceExceptions`
+
+The main attendance page still directly reads and writes `attendanceExceptions` and also directly manipulates `attendanceRecords`. This is a legitimate operational dependency outside the Employee Portal-only remediation boundary.
+
+**Decision:** no Firestore tightening for attendance collections in this cycle.
+
+### Suspension Firestore + Storage
+
+The suspension page currently:
+
+- authorizes the UI by directly reading its own `userAccess` document;
+- reads employee and suspension records directly from Firestore;
+- creates suspension records directly from the browser;
+- uploads supporting PDFs/JPG/PNG directly to Storage under `suspensions/{employeeId}/{suspensionId}/...`;
+- calls `getDownloadURL()` and stores the resulting persistent URL on the suspension record;
+- cancels suspensions with direct browser `updateDoc()`.
+
+The authoritative Storage baseline permits **any signed-in Firebase user** to read suspension documents and attempt a size/type-valid create. The application UI is narrower than the Storage rule, so UI visibility is currently carrying security responsibility that must not be treated as an authorization boundary.
+
+**Decision:** suspension Storage is a high-priority API-migration gate, but it is **not safe to tighten yet** because the current legitimate suspension workflow depends on direct browser upload/read. The future migration must move create/upload/download/cancel behind server authorization and stop persisting browser-facing download URLs before Storage client access is denied.
+
+### Legacy hard-coded UIDs
+
+The 2 September Firestore baseline still uses hard-coded privileged UIDs for `users`, signup-company maintenance, companies, relievers, EDOs, routes, employees and attendance exceptions.
+
+**Decision:** these UIDs are not globally obsolete. Their retirement must follow the API migration of each dependent BizCentral master-data workflow; removing them globally now would create legitimate regressions.
 
 ## Subsequent gates
 
