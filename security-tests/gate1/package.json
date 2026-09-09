@@ -1,0 +1,13 @@
+{
+  "name": "bizcentral-firestore-gate1-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "firebase emulators:exec --config firebase.gate1.json --project demo-bizcentral-gate1 --only firestore \"node useraccess-gate1.test.mjs\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "firebase": "^12.18.0",
+    "firebase-tools": "^14.0.0"
+  }
+}
