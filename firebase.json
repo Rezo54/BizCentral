@@ -1,0 +1,20 @@
+{
+  "firestore": [
+    {
+      "database": "biz-central",
+      "rules": "docs/security/firestore.rules.candidate-gate-1-userAccess"
+    }
+  ],
+  "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "ui": {
+      "enabled": false
+    },
+    "singleProjectMode": true
+  }
+}
