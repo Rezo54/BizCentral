@@ -17,6 +17,7 @@
 | Canonical login/session reads approved `userAccess` server-side | Code inspection | PASS |
 | Browser no longer needs `userAccess` create/update/delete | Residual source sweep | PASS |
 | Legitimate browser reads continue under candidate | Rule-diff inspection | PASS — candidate leaves get/list unchanged |
+| Emulator explicitly targets named database `biz-central` | Runtime emulator evidence | PENDING |
 | Direct browser create rejected by candidate | Runtime candidate-rule test | PENDING |
 | Direct browser update rejected by candidate | Runtime candidate-rule test | PENDING |
 | Direct browser delete rejected by candidate | Runtime candidate-rule test | PENDING |
@@ -57,6 +58,14 @@
 
 **Result:** the browser does not require write authority to `userAccess` for normal session establishment.
 
+### 5. Named database requirement
+
+`src/lib/firebase.ts` initializes client Firestore with `getFirestore(app, 'biz-central')`; therefore Gate 1 evidence must exercise that same named database.
+
+`docs/security/firebase.gate1-emulator.json` explicitly configures the `biz-central` database with the Gate 1 candidate rule file. Firebase documentation warns that a named database created only implicitly by an SDK/REST request can operate with open rules, so a test against `(default)` or an implicitly open `biz-central` database is invalid.
+
+The local execution procedure is recorded in `docs/security/FIRESTORE_GATE_1_MANUAL_EMULATOR_RUNBOOK.md`.
+
 ## Candidate rule effect
 
 Only the `userAccess` mutation block changes:
@@ -69,7 +78,15 @@ The existing `get` and Superadmin `list` rules remain unchanged for Gate 1.
 
 ## Runtime validation plan
 
-Runtime tests must be executed only in a non-production candidate-rules environment or another explicitly approved safe test environment.
+Runtime tests must be executed only in the local demo emulator configuration or another explicitly approved non-production candidate-rules environment. No production credentials or live data are permitted.
+
+### Database-target precondition
+
+Before any PASS is recorded, prove the request target is:
+
+`projects/demo-bizcentral-rules/databases/biz-central`
+
+If the target is `(default)`, the run is invalid and Gate 1 remains closed.
 
 ### Positive tests
 
@@ -97,10 +114,10 @@ Runtime tests must be executed only in a non-production candidate-rules environm
 
 ### Negative tests
 
-1. From an authenticated browser, attempt direct Firestore `setDoc()` on own `userAccess/{uid}`.
+1. From an authenticated client, attempt direct Firestore create on own `userAccess/{uid}`.
    - Expected: `permission-denied`.
 
-2. Attempt direct `updateDoc()` to change `accessLevel`, `status`, `userType`, `companyId`, or another authorization field.
+2. Attempt direct update to change `accessLevel`, `status`, `userType`, `companyId`, or another authorization field.
    - Expected: `permission-denied`.
 
 3. Attempt direct create/update against another UID.
@@ -109,18 +126,33 @@ Runtime tests must be executed only in a non-production candidate-rules environm
 4. Attempt direct delete of own or another `userAccess` document.
    - Expected: `permission-denied`.
 
-5. Verify legitimate existing browser `get` of own `userAccess` still succeeds where the UI requires it.
+5. Verify legitimate existing client `get` of own `userAccess` still succeeds where the UI requires it.
    - Expected: success.
 
 6. Verify Superadmin list still succeeds where currently required.
    - Expected: success.
 
+7. Attempt client mutation using the former bootstrap UID.
+   - Expected: `permission-denied`; Gate 1 removes that browser authority too.
+
+## Runtime evidence template
+
+- Date/time: PENDING
+- Branch SHA: PENDING
+- Firebase CLI version: PENDING
+- Emulator command: PENDING
+- Named database target proof: PENDING
+- Positive matrix: PENDING
+- Negative matrix: PENDING
+- Production credentials/live data used: NO
+- Firebase deploy executed: NO
+
 ## Decision rule
 
-Gate 1 may be recommended for live Firebase deployment only when all runtime positive and negative tests above pass and Benedict gives explicit production-rule approval.
+Gate 1 may be recommended for live Firebase deployment only when all runtime positive and negative tests above pass against the explicitly configured `biz-central` database and Benedict gives explicit production-rule approval.
 
 Until then:
 
-**Gate 1 status: STATICALLY VERIFIED / RUNTIME VALIDATION PENDING**  
+**Gate 1 status: STATICALLY VERIFIED / NAMED-DATABASE RUNTIME VALIDATION PENDING**  
 **Production changes: NONE**  
 **Live Firestore rules: UNCHANGED**
