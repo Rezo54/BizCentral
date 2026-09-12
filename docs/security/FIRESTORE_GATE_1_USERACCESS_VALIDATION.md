@@ -17,6 +17,8 @@
 | Canonical login/session reads approved `userAccess` server-side | Code inspection | PASS |
 | Browser no longer needs `userAccess` create/update/delete | Residual source sweep | PASS |
 | Legitimate browser reads continue under candidate | Rule-diff inspection | PASS — candidate leaves get/list unchanged |
+| Named-database automated test harness | Local test artifact | READY — `docs/security/run-gate1-named-db-test.cjs` |
+| Harness JavaScript syntax | Local static execution | PASS — `node --check` |
 | Emulator explicitly targets named database `biz-central` | Runtime emulator evidence | PENDING |
 | Direct browser create rejected by candidate | Runtime candidate-rule test | PENDING |
 | Direct browser update rejected by candidate | Runtime candidate-rule test | PENDING |
@@ -65,6 +67,16 @@
 `docs/security/firebase.gate1-emulator.json` explicitly configures the `biz-central` database with the Gate 1 candidate rule file. Firebase documentation warns that a named database created only implicitly by an SDK/REST request can operate with open rules, so a test against `(default)` or an implicitly open `biz-central` database is invalid.
 
 The local execution procedure is recorded in `docs/security/FIRESTORE_GATE_1_MANUAL_EMULATOR_RUNBOOK.md`.
+
+### 6. Named-database test harness
+
+`docs/security/run-gate1-named-db-test.cjs` now provides a bounded local emulator matrix. It hard-codes the demo project and `biz-central` database, seeds only synthetic local fixtures with Firebase Admin pointed at the emulator, and performs client-rule assertions with Auth-emulator ID tokens against the explicit named Firestore REST path.
+
+The harness currently covers own-record get, cross-user get denial, client create denial, self-elevation denial, cross-user mutation denial, client delete denial, Superadmin list, ordinary-user list denial, and Superadmin client-update denial.
+
+`node --check docs/security/run-gate1-named-db-test.cjs` passes in the available execution environment.
+
+The available execution environment has Node and Java but does not currently have the Firebase CLI/emulator binary installed/cached. Therefore the harness has **not** been executed against a running emulator in this evidence cycle and no runtime PASS is claimed.
 
 ## Candidate rule effect
 
@@ -153,6 +165,6 @@ Gate 1 may be recommended for live Firebase deployment only when all runtime pos
 
 Until then:
 
-**Gate 1 status: STATICALLY VERIFIED / NAMED-DATABASE RUNTIME VALIDATION PENDING**  
+**Gate 1 status: STATICALLY VERIFIED / LOCAL HARNESS READY / NAMED-DATABASE RUNTIME VALIDATION PENDING**  
 **Production changes: NONE**  
 **Live Firestore rules: UNCHANGED**
