@@ -2,7 +2,7 @@
   "firestore": [
     {
       "database": "biz-central",
-      "rules": "docs/security/firestore.rules.candidate-gate-1-userAccess"
+      "rules": "firestore.rules.candidate-gate-1-userAccess"
     }
   ],
   "emulators": {
