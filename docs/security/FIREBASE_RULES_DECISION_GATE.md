@@ -36,7 +36,7 @@ For each collection/path:
 
 ## Gate 1 — `userAccess` client writes
 
-**Status: CANDIDATE RULE PREPARED; STATICALLY VERIFIED; RUNTIME EMULATOR VALIDATION PENDING; NOT APPROVED FOR PRODUCTION DEPLOYMENT.**
+**Status: DEPLOYED TO `biz-central`; PRODUCTION-VALIDATED; CLOSED ON 2026-09-14.**
 
 Verified lifecycle mutations:
 
@@ -80,7 +80,7 @@ The preferred automated runner is a local `@firebase/rules-unit-testing` suite b
 
 **Named-database validation constraint:** BizCentral uses the named Firestore database `biz-central`. Current Firebase documentation states that `RulesTestEnvironment.clearFirestore()` operates on the default Firestore database and `RulesTestContext.firestore()` does not expose a database-ID parameter. Firebase also warns that named databases implicitly created by SDK/REST access can operate with open rules unless they are explicitly configured. Therefore a test that silently exercises `(default)` is not acceptable evidence for this gate. Runtime Gate 1 evidence must explicitly demonstrate that operations are targeting `projects/demo-bizcentral-rules/databases/biz-central` and that the candidate rules are loaded for that named database.
 
-**Gate 1 human test gate is therefore NOT YET OPEN.** Static evidence is complete; the remaining requirement is an executable local rules test or equivalent emulator integration test that proves both the deny/allow matrix and the named-database target before any live-rule change.
+Gate 1 passed the 15-case named-database emulator matrix and the human production smoke tests. Benedict explicitly approved and manually published the scoped `userAccess` mutation denial on 2026-09-14. Existing login, pending signup, approval, rejection and user-access synchronization continued to work.
 
 ## Residual dependency map — verified 9–10 September 2026
 
@@ -184,6 +184,6 @@ Suspension, attendance and broad BizCentral master-data migrations cross the Emp
 
 The Gate 1 runtime test is also constrained by the named `biz-central` database requirement. A default-database-only rules test would not meet the evidence threshold and must not be used to open the production decision gate.
 
-**Production changes:** NONE.  
-**Live Firestore rules:** UNCHANGED.  
+**Production changes:** Gate 1 `userAccess` client mutation denial deployed and validated.
+**Live Firestore rules:** Gate 1 active on `biz-central`; all other mapped rule areas unchanged.
 **Live Storage rules:** UNCHANGED.
