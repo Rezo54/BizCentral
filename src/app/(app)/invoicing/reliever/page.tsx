@@ -5,9 +5,6 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
-import { db } from "@/lib/firebase";
-import { doc, deleteDoc } from "firebase/firestore";
-
 import { getCurrentUser } from "@/lib/session";
 import NoAccess from "@/components/no-access";
 import { Button } from "@/components/ui/button";
@@ -22,6 +19,7 @@ import Link from "next/link";
 
 import {
   createRelieverInvoice,
+  deletePendingRelieverInvoice,
   listInvoicesForRelieverCompany,
   getRateFor,
   type ReliefType,
@@ -187,7 +185,7 @@ export default function RelieverInvoicingPage() {
   async function handleDelete(id: string) {
     if (!confirm("Delete invoice?")) return;
 
-    await deleteDoc(doc(db, "invoices", id));
+    await deletePendingRelieverInvoice(id);
     setRows((prev) => prev.filter((r) => r.id !== id));
   }
 

@@ -1,12 +1,18 @@
 // src/app/api/staff/activation/complete/route.ts
 
 import {
+  createHash,
+  timingSafeEqual,
+} from 'crypto';
+
+import {
   NextRequest,
   NextResponse,
 } from 'next/server';
 
 import {
   FieldValue,
+  Timestamp,
 } from 'firebase-admin/firestore';
 
 import bcrypt from 'bcryptjs';
@@ -21,6 +27,8 @@ import {
 // =====================================================
 
 const PIN_ROUNDS = 12;
+const PROOF_COOKIE =
+  'bizcentral_activation_proof';
 
 // =====================================================
 // HELPERS
@@ -30,6 +38,26 @@ function normalizePhone(
   value: string
 ) {
   return value.replace(/\D/g, '');
+}
+
+function hashProof(value: string) {
+  return createHash('sha256')
+    .update(value)
+    .digest('hex');
+}
+
+function safeEqualHex(
+  a: string,
+  b: string
+) {
+  try {
+    const x = Buffer.from(a, 'hex');
+    const y = Buffer.from(b, 'hex');
+    return x.length === y.length &&
+      timingSafeEqual(x, y);
+  } catch {
+    return false;
+  }
 }
 
 // =====================================================
@@ -59,16 +87,21 @@ export async function POST(
         ? body.pin.trim()
         : '';
 
+    const rawProof =
+      request.cookies.get(
+        PROOF_COOKIE
+      )?.value || '';
+
     // =================================================
     // BASIC VALIDATION
     // =================================================
 
-    if (!idToken) {
+    if (!idToken || !rawProof) {
       return NextResponse.json(
         {
           success: false,
           message:
-            'Authentication verification is required.',
+            'Your activation verification has expired. Please start activation again.',
         },
         {
           status: 401,
@@ -227,6 +260,11 @@ export async function POST(
     const portalData =
       portalDoc.data();
 
+    const suppliedHash =
+      hashProof(rawProof);
+
+    const now = Timestamp.now();
+
     // =================================================
     // EXISTING ACTIVATION CHECKS
     // =================================================
@@ -325,6 +363,29 @@ export async function POST(
           );
         }
 
+        const storedHash =
+          typeof current?.activationProofHash ===
+            'string'
+            ? current.activationProofHash
+            : '';
+
+        const expiresAt =
+          current?.activationProofExpiresAt;
+
+        if (
+          !storedHash ||
+          !(expiresAt instanceof Timestamp) ||
+          expiresAt.toMillis() <= now.toMillis() ||
+          !safeEqualHex(
+            storedHash,
+            suppliedHash
+          )
+        ) {
+          throw new Error(
+            'ACTIVATION_PROOF_INVALID'
+          );
+        }
+
         transaction.update(
           portalDoc.ref,
           {
@@ -337,6 +398,15 @@ export async function POST(
             activatedAt:
               FieldValue.serverTimestamp(),
 
+            activationProofHash:
+              FieldValue.delete(),
+
+            activationProofExpiresAt:
+              FieldValue.delete(),
+
+            activationProofIssuedAt:
+              FieldValue.delete(),
+
             updatedAt:
               FieldValue.serverTimestamp(),
           }
@@ -348,16 +418,33 @@ export async function POST(
     // SUCCESS
     // =================================================
 
-    return NextResponse.json(
+    const response =
+      NextResponse.json(
+        {
+          success: true,
+          message:
+            'Employee Portal account activated successfully.',
+        },
+        {
+          status: 200,
+        }
+      );
+
+    response.cookies.set(
+      PROOF_COOKIE,
+      '',
       {
-        success: true,
-        message:
-          'Employee Portal account activated successfully.',
-      },
-      {
-        status: 200,
+        httpOnly: true,
+        secure:
+          process.env.NODE_ENV ===
+          'production',
+        sameSite: 'lax',
+        path: '/api/staff/activation',
+        maxAge: 0,
       }
     );
+
+    return response;
 
   } catch (error: unknown) {
 
@@ -416,6 +503,24 @@ export async function POST(
         },
         {
           status: 404,
+        }
+      );
+    }
+
+    if (
+      message ===
+      'ACTIVATION_PROOF_INVALID'
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          code:
+            'ACTIVATION_PROOF_INVALID',
+          message:
+            'Your activation verification is invalid or has expired. Please start activation again.',
+        },
+        {
+          status: 401,
         }
       );
     }
