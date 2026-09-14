@@ -17,6 +17,12 @@ The candidate is isolated in
 `docs/security/firestore.rules.candidate-gate-2-invoices`. It has not been
 deployed to Firebase.
 
+The immutable original rules remain in
+`docs/security/firestore.rules.current-baseline`. The latest confirmed deployed
+rules are recorded separately in
+`docs/security/firestore.rules.current-production`; future production rule
+updates must update that rolling snapshot without changing the baseline.
+
 ## Runtime evidence
 
 Run from the repository root with Node 20 or 22 and Java 21 available:
