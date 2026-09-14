@@ -1,12 +1,15 @@
 'use strict';
 
 const { initializeApp, deleteApp } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
 
 const PROJECT_ID = 'demo-bizcentral-rules';
 const DATABASE_ID = 'biz-central';
 const FIRESTORE_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
 const AUTH_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
+const TEST_PASSWORD = 'LocalOnly-RuleTest-123!';
+const FORMER_BOOTSTRAP_UID = 'vUT0mXIMawUvYeS9ZsyUrYLw6gh1';
 
 process.env.FIRESTORE_EMULATOR_HOST = FIRESTORE_HOST;
 process.env.FIREBASE_AUTH_EMULATOR_HOST = AUTH_HOST;
@@ -40,7 +43,7 @@ async function createAuthUser(label) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       email,
-      password: 'LocalOnly-RuleTest-123!',
+      password: TEST_PASSWORD,
       returnSecureToken: true,
     }),
   });
@@ -50,6 +53,26 @@ async function createAuthUser(label) {
   }
 
   return { uid: body.localId, token: body.idToken };
+}
+
+async function createAuthUserWithUid(adminAuth, label, uid) {
+  const email = `${label}-${Date.now()}-${Math.random().toString(16).slice(2)}@example.test`;
+  await adminAuth.createUser({ uid, email, password: TEST_PASSWORD, emailVerified: true });
+
+  const { response, body } = await jsonRequest(
+    `${authBase}/accounts:signInWithPassword?key=fake-api-key`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password: TEST_PASSWORD, returnSecureToken: true }),
+    },
+  );
+
+  if (!response.ok || !body?.idToken) {
+    fail(`Auth emulator fixed-UID sign-in failed (${response.status}): ${JSON.stringify(body)}`);
+  }
+
+  return { uid, token: body.idToken };
 }
 
 function userAccessFixture(uid, accessLevel = 'standard') {
@@ -75,7 +98,8 @@ function firestoreFields(values) {
 
 async function clientDoc(method, uid, token, fields) {
   const url = `${firestoreBase}/userAccess/${encodeURIComponent(uid)}`;
-  const headers = { authorization: `Bearer ${token}` };
+  const headers = {};
+  if (token) headers.authorization = `Bearer ${token}`;
   if (fields) headers['content-type'] = 'application/json';
 
   return jsonRequest(url, {
@@ -105,6 +129,7 @@ async function main() {
 
   const app = initializeApp({ projectId: PROJECT_ID }, `gate1-${Date.now()}`);
   const adminDb = getFirestore(app, DATABASE_ID);
+  const adminAuth = getAuth(app);
   const createdUsers = [];
 
   try {
@@ -116,6 +141,12 @@ async function main() {
     createdUsers.push(superadmin);
     const other = await createAuthUser('other');
     createdUsers.push(other);
+    const bootstrap = await createAuthUserWithUid(
+      adminAuth,
+      'former-bootstrap',
+      FORMER_BOOTSTRAP_UID,
+    );
+    createdUsers.push(bootstrap);
 
     // Firebase Admin talks only to the emulator and is used solely for local fixtures.
     // Client-rule assertions below use Auth-emulator ID tokens over Firestore REST.
@@ -133,6 +164,18 @@ async function main() {
       'ordinary user cannot read another userAccess document',
       clientDoc('GET', other.uid, ordinary.token),
       [403],
+    );
+
+    await expectStatus(
+      'unauthenticated caller cannot read userAccess',
+      clientDoc('GET', ordinary.uid),
+      [401, 403],
+    );
+
+    await expectStatus(
+      'superadmin can read another userAccess document',
+      clientDoc('GET', ordinary.uid, superadmin.token),
+      [200],
     );
 
     await expectStatus(
@@ -203,6 +246,45 @@ async function main() {
       [403],
     );
 
+    await expectStatus(
+      'superadmin browser create is denied under Gate 1 candidate',
+      clientDoc(
+        'PATCH',
+        creator.uid,
+        superadmin.token,
+        firestoreFields(userAccessFixture(creator.uid, 'standard')),
+      ),
+      [403],
+    );
+
+    await expectStatus(
+      'superadmin browser delete is denied under Gate 1 candidate',
+      clientDoc('DELETE', other.uid, superadmin.token),
+      [403],
+    );
+
+    await expectStatus(
+      'former bootstrap UID cannot create userAccess',
+      clientDoc(
+        'PATCH',
+        bootstrap.uid,
+        bootstrap.token,
+        firestoreFields(userAccessFixture(bootstrap.uid, 'superadmin')),
+      ),
+      [403],
+    );
+
+    await expectStatus(
+      'former bootstrap UID cannot update userAccess',
+      clientDoc(
+        'PATCH',
+        ordinary.uid,
+        bootstrap.token,
+        firestoreFields({ status: 'removed' }),
+      ),
+      [403],
+    );
+
     console.log('Gate 1 named-database rule test PASS.');
   } finally {
     await Promise.all(
@@ -210,6 +292,9 @@ async function main() {
         adminDb.doc(`userAccess/${user.uid}`).delete().catch(() => {}),
       ),
     ).catch(() => {});
+    await Promise.all(createdUsers.map((user) => adminAuth.deleteUser(user.uid).catch(() => {}))).catch(
+      () => {},
+    );
     await deleteApp(app);
   }
 }
