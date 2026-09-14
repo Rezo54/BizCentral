@@ -19,10 +19,10 @@
 | Legitimate browser reads continue under candidate | Rule-diff inspection | PASS — candidate leaves get/list unchanged |
 | Named-database automated test harness | Local test artifact | READY — `docs/security/run-gate1-named-db-test.cjs` |
 | Harness JavaScript syntax | Local static execution | PASS — `node --check` |
-| Emulator explicitly targets named database `biz-central` | Runtime emulator evidence | PENDING |
-| Direct browser create rejected by candidate | Runtime candidate-rule test | PENDING |
-| Direct browser update rejected by candidate | Runtime candidate-rule test | PENDING |
-| Direct browser delete rejected by candidate | Runtime candidate-rule test | PENDING |
+| Emulator explicitly targets named database `biz-central` | Runtime emulator evidence | PASS — 2026-09-14 |
+| Direct browser create rejected by candidate | Runtime candidate-rule test | PASS — HTTP 403 |
+| Direct browser update rejected by candidate | Runtime candidate-rule test | PASS — HTTP 403 |
+| Direct browser delete rejected by candidate | Runtime candidate-rule test | PASS — HTTP 403 |
 | Normal signup still succeeds with candidate active | Runtime candidate-rule test | PENDING |
 | Superadmin approve/reject/remove still succeeds | Runtime candidate-rule test | PENDING |
 | User-access sync still succeeds | Runtime candidate-rule test | PENDING |
@@ -76,7 +76,7 @@ The harness currently covers own-record get, cross-user get denial, client creat
 
 `node --check docs/security/run-gate1-named-db-test.cjs` passes in the available execution environment.
 
-The available execution environment has Node and Java but does not currently have the Firebase CLI/emulator binary installed/cached. Therefore the harness has **not** been executed against a running emulator in this evidence cycle and no runtime PASS is claimed.
+On 2026-09-14 the harness passed against Firebase CLI 14.22.0 and the Java 17-compatible local Emulator Suite. The run explicitly targeted `projects/demo-bizcentral-rules/databases/biz-central`; all nine current allow/deny assertions passed. The first attempted run exposed and rejected an incorrectly resolved rules path before evidence was recorded. The emulator config was corrected to resolve the candidate rule relative to the config file, and the clean rerun loaded the candidate without an open-rules warning.
 
 ## Candidate rule effect
 
@@ -149,13 +149,14 @@ If the target is `(default)`, the run is invalid and Gate 1 remains closed.
 
 ## Runtime evidence template
 
-- Date/time: PENDING
-- Branch SHA: PENDING
-- Firebase CLI version: PENDING
-- Emulator command: PENDING
-- Named database target proof: PENDING
-- Positive matrix: PENDING
-- Negative matrix: PENDING
+- Date/time: 2026-09-14 (UTC)
+- Branch SHA: `12760f7` plus the test-evidence/config correction in the subsequent commit
+- Firebase CLI version: `14.22.0`
+- Emulator command: `npx --yes firebase-tools@14.22.0 emulators:exec --only auth,firestore --project demo-bizcentral-rules --config docs/security/firebase.gate1-emulator.json "node docs/security/run-gate1-named-db-test.cjs"`
+- Named database target proof: PASS — harness printed `projects/demo-bizcentral-rules/databases/biz-central`
+- Automated positive matrix: PASS — own get and Superadmin list returned HTTP 200
+- Automated negative matrix: PASS — seven cross-user/list/create/update/elevation/delete assertions returned HTTP 403
+- Server-mediated application regression matrix: PENDING
 - Production credentials/live data used: NO
 - Firebase deploy executed: NO
 
@@ -165,6 +166,6 @@ Gate 1 may be recommended for live Firebase deployment only when all runtime pos
 
 Until then:
 
-**Gate 1 status: STATICALLY VERIFIED / LOCAL HARNESS READY / NAMED-DATABASE RUNTIME VALIDATION PENDING**  
+**Gate 1 status: STATICALLY VERIFIED / NAMED-DATABASE RULE MATRIX PASSED / SERVER-PATH REGRESSION VALIDATION PENDING**
 **Production changes: NONE**  
 **Live Firestore rules: UNCHANGED**
