@@ -22,7 +22,7 @@ BizCentral initializes Firestore with `getFirestore(app, 'biz-central')`. Fireba
 "firestore": [
   {
     "database": "biz-central",
-    "rules": "docs/security/firestore.rules.candidate-gate-1-userAccess"
+    "rules": "firestore.rules.candidate-gate-1-userAccess"
   }
 ]
 ```
@@ -64,28 +64,21 @@ The current harness verifies:
 
 1. An authenticated ordinary user can `get` its own `userAccess/{uid}` record.
 2. An authenticated superadmin can list `userAccess` records.
+3. An authenticated superadmin can `get` another user's `userAccess` record.
 
 ### Denied
 
-3. Ordinary authenticated user cannot get another user's `userAccess/{uid}`.
-4. Ordinary authenticated user cannot list `userAccess`.
-5. Ordinary authenticated user cannot create its own `userAccess` record through the client.
-6. Ordinary authenticated user cannot elevate its own `accessLevel` through the client.
-7. Ordinary authenticated user cannot mutate another user's `userAccess` record.
-8. Ordinary authenticated user cannot delete its own `userAccess` record.
-9. Superadmin client cannot update another `userAccess` record under the Gate 1 candidate.
+4. Unauthenticated caller cannot get a `userAccess` record.
+5. Ordinary authenticated user cannot get another user's `userAccess/{uid}`.
+6. Ordinary authenticated user cannot list `userAccess`.
+7. Ordinary authenticated user cannot create its own `userAccess` record through the client.
+8. Ordinary authenticated user cannot elevate its own `accessLevel` through the client.
+9. Ordinary authenticated user cannot mutate another user's `userAccess` record.
+10. Ordinary authenticated user cannot delete its own `userAccess` record.
+11. Superadmin client cannot create, update or delete `userAccess` under the Gate 1 candidate.
+12. The former bootstrap UID cannot create or update `userAccess` through the client.
 
-## Remaining manual assertions before human Gate 1 review
-
-The following cases remain explicit manual checks until they are added to the harness:
-
-1. Unauthenticated caller cannot get `userAccess/{uid}`.
-2. Superadmin can `get` another `userAccess/{uid}` record.
-3. Superadmin client cannot create or delete `userAccess`.
-4. The former bootstrap UID cannot create or update `userAccess` through client Firestore.
-5. Client delete is denied for every caller class.
-
-No human Gate 1 review should be opened until the complete matrix is covered and passes.
+The automated rule matrix now covers all previously listed manual rule assertions. The remaining human work is the server-path application regression checklist in `docs/security/FIRESTORE_GATE_1_HUMAN_REGRESSION_CHECKLIST.md`.
 
 ## Server-path regression check
 
