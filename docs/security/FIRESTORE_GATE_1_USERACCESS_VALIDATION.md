@@ -23,6 +23,10 @@
 | Direct browser create rejected by candidate | Runtime candidate-rule test | PASS — HTTP 403 |
 | Direct browser update rejected by candidate | Runtime candidate-rule test | PASS — HTTP 403 |
 | Direct browser delete rejected by candidate | Runtime candidate-rule test | PASS — HTTP 403 |
+| Unauthenticated `userAccess` read rejected | Runtime candidate-rule test | PASS — HTTP 403 |
+| Superadmin cross-user get remains allowed | Runtime candidate-rule test | PASS — HTTP 200 |
+| Superadmin browser create/update/delete rejected | Runtime candidate-rule test | PASS — HTTP 403 |
+| Former bootstrap UID create/update rejected | Runtime candidate-rule test | PASS — HTTP 403 |
 | Normal signup still succeeds with candidate active | Runtime candidate-rule test | PENDING |
 | Superadmin approve/reject/remove still succeeds | Runtime candidate-rule test | PENDING |
 | User-access sync still succeeds | Runtime candidate-rule test | PENDING |
@@ -72,11 +76,11 @@ The local execution procedure is recorded in `docs/security/FIRESTORE_GATE_1_MAN
 
 `docs/security/run-gate1-named-db-test.cjs` now provides a bounded local emulator matrix. It hard-codes the demo project and `biz-central` database, seeds only synthetic local fixtures with Firebase Admin pointed at the emulator, and performs client-rule assertions with Auth-emulator ID tokens against the explicit named Firestore REST path.
 
-The harness currently covers own-record get, cross-user get denial, client create denial, self-elevation denial, cross-user mutation denial, client delete denial, Superadmin list, ordinary-user list denial, and Superadmin client-update denial.
+The harness now covers 15 assertions: own-record get, cross-user and unauthenticated get denial, Superadmin cross-user get and list, ordinary-user list denial, ordinary create/update/elevation/delete denial, Superadmin create/update/delete denial, and former-bootstrap-UID create/update denial.
 
 `node --check docs/security/run-gate1-named-db-test.cjs` passes in the available execution environment.
 
-On 2026-09-14 the harness passed against Firebase CLI 14.22.0 and the Java 17-compatible local Emulator Suite. The run explicitly targeted `projects/demo-bizcentral-rules/databases/biz-central`; all nine current allow/deny assertions passed. The first attempted run exposed and rejected an incorrectly resolved rules path before evidence was recorded. The emulator config was corrected to resolve the candidate rule relative to the config file, and the clean rerun loaded the candidate without an open-rules warning.
+On 2026-09-14 the harness passed against Firebase CLI 14.22.0 and the Java 17-compatible local Emulator Suite. The run explicitly targeted `projects/demo-bizcentral-rules/databases/biz-central`; all 15 current allow/deny assertions passed. The first attempted run exposed and rejected an incorrectly resolved rules path before evidence was recorded. The emulator config was corrected to resolve the candidate rule relative to the config file, and the clean rerun loaded the candidate without an open-rules warning.
 
 ## Candidate rule effect
 
@@ -154,8 +158,8 @@ If the target is `(default)`, the run is invalid and Gate 1 remains closed.
 - Firebase CLI version: `14.22.0`
 - Emulator command: `npx --yes firebase-tools@14.22.0 emulators:exec --only auth,firestore --project demo-bizcentral-rules --config docs/security/firebase.gate1-emulator.json "node docs/security/run-gate1-named-db-test.cjs"`
 - Named database target proof: PASS — harness printed `projects/demo-bizcentral-rules/databases/biz-central`
-- Automated positive matrix: PASS — own get and Superadmin list returned HTTP 200
-- Automated negative matrix: PASS — seven cross-user/list/create/update/elevation/delete assertions returned HTTP 403
+- Automated positive matrix: PASS — three own/Superadmin get/list assertions returned HTTP 200
+- Automated negative matrix: PASS — 12 unauthenticated/cross-user/list/create/update/elevation/delete assertions returned HTTP 403
 - Server-mediated application regression matrix: PENDING
 - Production credentials/live data used: NO
 - Firebase deploy executed: NO
