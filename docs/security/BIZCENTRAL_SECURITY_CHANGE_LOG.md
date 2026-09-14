@@ -164,6 +164,24 @@ C-001 remains **OPEN** because the invoice approval/rejection page still contain
 
 ---
 
+## 2026-09-14 — Invoice API Migration Candidate
+
+**Purpose:** Remove the final known browser Firestore dependencies for `/invoices` before tightening the collection rules.
+
+**Candidate implementation:**
+- Dashboard pending-invoice data now uses the authenticated, server-scoped `/api/invoices` read path.
+- Reliever approval/history data now uses the same server-scoped read path.
+- Pending invoice deletion now uses `DELETE /api/invoices/{invoiceId}`.
+- The delete API requires approved canonical `userAccess`, a reliever identity, matching UID or canonical legacy company ownership, and `status=pending` inside a transaction.
+- Approved/rejected invoices, cross-reliever invoices and non-reliever callers cannot be deleted through the API.
+- Browser code no longer directly reads or deletes `/invoices`.
+
+**Automated evidence:** `node docs/security/run-invoice-api-migration-check.cjs` passes 12/12 static migration assertions. The repository-wide TypeScript check still reports pre-existing baseline errors outside these changed invoice files; it reports no new invoice-migration error.
+
+**Status:** APPLICATION CANDIDATE READY FOR HUMAN REGRESSION TEST. Firestore rules remain unchanged. Do not tighten the live `/invoices` rule until the legitimate reliever, EDO and Taskraft workflows pass on the isolated Netlify preview and the invoice rules candidate passes named-database emulator tests.
+
+---
+
 ### Mandatory anomaly-elimination completion gate
 
 The BizCentral security upgrade SHALL NOT be declared complete merely because planned migration steps have been implemented. Before final sign-off, Sol and Benedict Mahlangu must perform a dedicated **Security Anomaly Closure Audit** across the active application and rules.

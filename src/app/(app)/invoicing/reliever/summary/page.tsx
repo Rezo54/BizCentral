@@ -59,6 +59,12 @@ export default function RelieverSummaryPage() {
   const [reliefTypeFilter, setReliefTypeFilter] = useState("all");
 
   const router = useRouter();
+  const invoicePage = user?.userType === "reliever"
+    ? "/invoicing/reliever"
+    : "/invoicing/reliever/approve";
+  const invoicePageLabel = user?.userType === "reliever"
+    ? "Back to Reliever Invoicing"
+    : "Back to Reliever Invoice Approval";
 
 
 
@@ -325,8 +331,8 @@ export default function RelieverSummaryPage() {
 
       <div className="no-print space-y-6">
         <div>
-          <Button variant="ghost" onClick={() => router.push("/invoicing/reliever/approve")} className="h-auto px-0 hover:bg-transparent">
-            ← Back to Reliever Invoice Approval
+          <Button variant="ghost" onClick={() => router.push(invoicePage)} className="h-auto px-0 hover:bg-transparent">
+            ← {invoicePageLabel}
           </Button>
         </div>
         <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
