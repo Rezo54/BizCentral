@@ -2,7 +2,7 @@
 
 **Candidate:** `docs/security/firestore.rules.candidate-gate-1-userAccess`  
 **Working branch:** `agent/security-employee-portal`  
-**Live Firestore rules:** unchanged  
+**Live Firestore rules:** Gate 1 deployed and validated on 2026-09-14
 **Purpose:** prove that browser create/update/delete access to `userAccess/{uid}` can be retired without breaking legitimate BizCentral workflows.
 
 ## Validation status
@@ -27,10 +27,11 @@
 | Superadmin cross-user get remains allowed | Runtime candidate-rule test | PASS — HTTP 200 |
 | Superadmin browser create/update/delete rejected | Runtime candidate-rule test | PASS — HTTP 403 |
 | Former bootstrap UID create/update rejected | Runtime candidate-rule test | PASS — HTTP 403 |
-| Normal signup still succeeds with candidate active | Runtime candidate-rule test | PENDING |
-| Superadmin approve/reject/remove still succeeds | Runtime candidate-rule test | PENDING |
-| User-access sync still succeeds | Runtime candidate-rule test | PENDING |
-| Normal approved session/login still succeeds | Runtime candidate-rule test | PENDING |
+| Normal signup still succeeds with Gate 1 active | Production human smoke test | PASS |
+| Superadmin approve and reject still succeed | Production human smoke test | PASS |
+| Superadmin remove remains server-mediated | Source inspection; not repeated in production smoke | PASS — unchanged API path |
+| User-access sync still succeeds | Production human smoke test | PASS |
+| Normal approved session/login still succeeds | Production human smoke test | PASS |
 
 ## Static evidence
 
@@ -160,16 +161,24 @@ If the target is `(default)`, the run is invalid and Gate 1 remains closed.
 - Named database target proof: PASS — harness printed `projects/demo-bizcentral-rules/databases/biz-central`
 - Automated positive matrix: PASS — three own/Superadmin get/list assertions returned HTTP 200
 - Automated negative matrix: PASS — 12 unauthenticated/cross-user/list/create/update/elevation/delete assertions returned HTTP 403
-- Server-mediated application regression matrix: PENDING
+- Server-mediated application regression matrix: PASS — completed by human production smoke test
 - Production credentials/live data used: NO
 - Firebase deploy executed: NO
+
+## Production deployment evidence
+
+- Deployment approval: Benedict explicitly approved Gate 1 on 2026-09-14.
+- Deployment method: manual Firebase Console publication by Benedict to the named production database `biz-central`.
+- Deployed rule delta: `userAccess` client `create`, `update` and `delete` changed to `if false`; existing `get` and Superadmin `list` permissions remained unchanged.
+- Immediate smoke tests: existing login/dashboard/logout/login, new pending signup, Superadmin rejection, Superadmin approval and user-access synchronization all passed.
+- Main BizCentral regression observed: none.
+- Rollback required: no.
 
 ## Decision rule
 
 Gate 1 may be recommended for live Firebase deployment only when all runtime positive and negative tests above pass against the explicitly configured `biz-central` database and Benedict gives explicit production-rule approval.
 
-Until then:
+**Gate 1 status: DEPLOYED / PRODUCTION-VALIDATED / CLOSED**
 
-**Gate 1 status: STATICALLY VERIFIED / NAMED-DATABASE RULE MATRIX PASSED / SERVER-PATH REGRESSION VALIDATION PENDING**
-**Production changes: NONE**  
-**Live Firestore rules: UNCHANGED**
+**Production change:** `userAccess` browser create/update/delete denied.
+**Live Firestore rules:** Gate 1 active on `biz-central`.
