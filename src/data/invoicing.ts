@@ -35,11 +35,11 @@ export function getAllRates() { return { ...RATE_MATRIX }; }
 export function setRate(type: ReliefType, value: number) { RATE_MATRIX[type] = value; }
 export function getRateFor(type: ReliefType): number { return RATE_MATRIX[type]; }
 
-async function invoiceApi(method: 'GET' | 'POST', body?: unknown) {
+async function invoiceApi(method: 'GET' | 'POST' | 'DELETE', body?: unknown, path = '/api/invoices') {
   const firebaseUser = auth.currentUser;
   if (!firebaseUser) throw new Error('Your authenticated session is not available.');
   const token = await firebaseUser.getIdToken();
-  const response = await fetch('/api/invoices', {
+  const response = await fetch(path, {
     method,
     cache: 'no-store',
     headers: {
@@ -92,6 +92,10 @@ export async function listInvoicesForRelieverCompany(_companyId?: string): Promi
 export async function listInvoicesForEdo(_edoId?: string): Promise<RelieverInvoice[]> {
   const payload = await invoiceApi('GET');
   return payload.invoices ?? [];
+}
+
+export async function deletePendingRelieverInvoice(invoiceId: string): Promise<void> {
+  await invoiceApi('DELETE', undefined, `/api/invoices/${encodeURIComponent(invoiceId)}`);
 }
 
 // Invoice approval/rejection is intentionally NOT implemented in this browser

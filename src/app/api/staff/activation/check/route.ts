@@ -1,5 +1,6 @@
 
 
+import { createHash, randomBytes } from 'crypto';
 import { NextResponse } from 'next/server';
 
 import {
@@ -29,6 +30,12 @@ const OTP_MAX_PER_DAY = 10;
 const ID_VERIFY_MAX_FAILURES = 5;
 const ID_VERIFY_WINDOW_MINUTES = 15;
 const ID_VERIFY_BLOCK_MINUTES = 30;
+const ACTIVATION_PROOF_MINUTES = 10;
+const ACTIVATION_PROOF_COOKIE = 'bizcentral_activation_proof';
+
+function proofHash(value: string) {
+  return createHash('sha256').update(value).digest('hex');
+}
 
 // =====================================================
 // GENERIC VERIFICATION FAILURE
@@ -165,6 +172,18 @@ export async function POST(
         .doc(employeeId);
 
     const now = Timestamp.now();
+
+    const rawProof =
+      randomBytes(32).toString('hex');
+
+    const hashedProof =
+      proofHash(rawProof);
+
+    const proofExpiresAt =
+      Timestamp.fromMillis(
+        now.toMillis() +
+        ACTIVATION_PROOF_MINUTES * 60 * 1000
+      );
 
     // All account-specific identity and OTP throttling is performed in one
     // transaction so concurrent requests cannot bypass either control.
@@ -448,6 +467,12 @@ export async function POST(
               otpDailyStartedAt,
               lastOtpRequestedAt: now,
               otpBlockedUntil: null,
+              activationProofHash:
+                hashedProof,
+              activationProofExpiresAt:
+                proofExpiresAt,
+              activationProofIssuedAt:
+                now,
               updatedAt:
                 FieldValue.serverTimestamp(),
               ...(
@@ -493,15 +518,33 @@ export async function POST(
       );
     }
 
-    return NextResponse.json(
+    const response =
+      NextResponse.json(
+        {
+          success: true,
+          code: 'OTP_ALLOWED',
+          cellphone: `+${cellphone}`,
+          employeeId,
+        },
+        { status: 200 }
+      );
+
+    response.cookies.set(
+      ACTIVATION_PROOF_COOKIE,
+      rawProof,
       {
-        success: true,
-        code: 'OTP_ALLOWED',
-        cellphone: `+${cellphone}`,
-        employeeId,
-      },
-      { status: 200 }
+        httpOnly: true,
+        secure:
+          process.env.NODE_ENV ===
+          'production',
+        sameSite: 'lax',
+        path: '/api/staff/activation',
+        maxAge:
+          ACTIVATION_PROOF_MINUTES * 60,
+      }
     );
+
+    return response;
 
   } catch (error: unknown) {
     console.error(
