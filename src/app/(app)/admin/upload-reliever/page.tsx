@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import * as XLSX from "xlsx";
-import { db } from "@/lib/firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { auth } from "@/lib/firebase";
 
 export default function RelieverUploadPage() {
   const [rows, setRows] = useState<any[]>([]);
@@ -11,97 +10,68 @@ export default function RelieverUploadPage() {
 
   function handleFileUpload(e: any) {
     const file = e.target.files[0];
-    const reader = new FileReader();
+    if (!file) return;
 
+    const reader = new FileReader();
     reader.onload = (evt: any) => {
       const data = new Uint8Array(evt.target.result);
       const workbook = XLSX.read(data, { type: "array" });
-
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(sheet);
-
-      console.log("RELIEVER DATA:", jsonData);
-      setRows(jsonData);
+      setRows(XLSX.utils.sheet_to_json(sheet));
     };
-
     reader.readAsArrayBuffer(file);
-  }
-
-  function createRelieverId(name: string, phone: string) {
-    const cleanPhone = String(phone || "").replace(/\D/g, "");
-
-    return (
-      "rel-" +
-      name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "") +
-      "-" +
-      cleanPhone
-    );
   }
 
   async function uploadToFirebase() {
     setLoading(true);
 
     try {
-      console.log("🔥 START RELIEVER UPLOAD");
+      const user = auth.currentUser;
+      if (!user) throw new Error("Please sign in again.");
 
-      for (const row of rows) {
-        const normalized: any = {};
-
+      const normalizedRows = rows.map((row) => {
+        const normalized: Record<string, unknown> = {};
         Object.keys(row).forEach((key) => {
           normalized[key.trim().toLowerCase()] = row[key];
         });
 
-        const site = normalized["site"];
-        const name = normalized["reliever name"];
-        const businessName = normalized["business name"];
+        return {
+          site: normalized["site"],
+          name: normalized["reliever name"],
+          businessName: normalized["business name"],
+          cellphone:
+            normalized["cellphone"] ||
+            normalized["cellphone number"] ||
+            normalized["phone"] ||
+            normalized["mobile"],
+        };
+      });
 
-        const cellphone =
-          normalized["cellphone"] ||
-          normalized["cellphone number"] ||
-          normalized["phone"] ||
-          normalized["mobile"];
+      const token = await user.getIdToken();
+      const response = await fetch("/api/admin/master-data/reliever-import", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ rows: normalizedRows }),
+      });
 
-        if (!name) {
-          console.log("⛔ Skipping (no reliever name)");
-          continue;
-        }
-
-        if (!cellphone) {
-          console.log("⛔ Skipping (no cellphone)");
-          continue;
-        }
-
-        const cleanCellphone = String(cellphone).replace(/\D/g, "");
-
-        const relieverId = createRelieverId(name, cleanCellphone);
-
-        // =========================
-        // 👤 CREATE RELIEVER
-        // =========================
-        await setDoc(doc(db, "relievers", relieverId), {
-          id: relieverId,           // 🔥 CRITICAL
-          relieverId,
-          name,
-          cellphone: cleanCellphone,
-          businessName: businessName || "",
-          site: site || "",
-          createdAt: new Date(),
-        });
-
-        console.log("✅ Reliever saved:", relieverId);
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Upload failed");
       }
 
-      console.log("✅ RELIEVER UPLOAD DONE");
-      alert("Reliever upload complete!");
+      alert(
+        `Reliever upload complete! ${result.relievers} relievers` +
+          (result.skipped ? `, ${result.skipped} rows skipped.` : ".")
+      );
     } catch (err) {
-      console.error("❌ ERROR:", err);
-      alert("Upload failed");
+      console.error("Reliever upload failed:", err);
+      alert(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   return (

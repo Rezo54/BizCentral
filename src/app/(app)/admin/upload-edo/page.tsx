@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import * as XLSX from "xlsx";
-import { db } from "@/lib/firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { auth } from "@/lib/firebase";
 
 export default function EdoUploadPage() {
   const [rows, setRows] = useState<any[]>([]);
@@ -11,121 +10,67 @@ export default function EdoUploadPage() {
 
   function handleFileUpload(e: any) {
     const file = e.target.files[0];
-    const reader = new FileReader();
+    if (!file) return;
 
+    const reader = new FileReader();
     reader.onload = (evt: any) => {
       const data = new Uint8Array(evt.target.result);
       const workbook = XLSX.read(data, { type: "array" });
-
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(sheet);
-
-      console.log("EDO DATA:", jsonData);
-      setRows(jsonData);
+      setRows(XLSX.utils.sheet_to_json(sheet));
     };
-
     reader.readAsArrayBuffer(file);
-  }
-
-  function createId(name: string) {
-    return (
-      "edo-" +
-      name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "")
-    );
   }
 
   async function uploadToFirebase() {
     setLoading(true);
 
     try {
-      console.log("🔥 START UPLOAD");
+      const user = auth.currentUser;
+      if (!user) throw new Error("Please sign in again.");
 
-      const createdCompanies = new Set<string>();
-
-      for (const row of rows) {
-        const normalizedRow: any = {};
-
+      const normalizedRows = rows.map((row) => {
+        const normalized: Record<string, unknown> = {};
         Object.keys(row).forEach((key) => {
-          normalizedRow[key.trim().toLowerCase()] = row[key];
+          normalized[key.trim().toLowerCase()] = row[key];
         });
 
-        const site = normalizedRow["site"];
+        return {
+          site: normalized["site"],
+          companyName: normalized["company name"],
+          edoBusinessName: normalized["edo business name"],
+          routeNo: normalized["route no"],
+          route: normalized["route"],
+          routeDescription: normalized["route description"],
+          description: normalized["description"],
+        };
+      });
 
-        const name =
-          normalizedRow["company name"] ||
-          normalizedRow["edo business name"];
+      const token = await user.getIdToken();
+      const response = await fetch("/api/admin/master-data/edo-import", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ rows: normalizedRows }),
+      });
 
-        const routeNo =
-          normalizedRow["route no"] ||
-          normalizedRow["route"];
-
-        const routeDesc =
-          normalizedRow["route description"] ||
-          normalizedRow["description"] ||
-          "";
-
-        // 🔒 VALIDATION
-        if (!routeNo) {
-          console.log("⛔ Skipping row (no routeNo)");
-          continue;
-        }
-
-        if (!name) {
-          console.log("⛔ Skipping row (no name)");
-          continue;
-        }
-
-        // 🔥 STANDARD ID
-        const companyId = createId(name);
-
-        const cleanSite = site
-          ? String(site).trim().toLowerCase()
-          : "";
-
-        // =========================
-        // 🏢 CREATE COMPANY
-        // =========================
-        if (!createdCompanies.has(companyId)) {
-          await setDoc(doc(db, "companies", companyId), {
-            id: companyId,              // 🔥 CRITICAL
-            name,
-            type: "edo",
-            site: cleanSite,
-            createdAt: new Date(),      // useful later
-          });
-
-          createdCompanies.add(companyId);
-
-          console.log("✅ COMPANY:", companyId);
-        }
-
-        // =========================
-        // 🚚 CREATE ROUTE
-        // =========================
-        const routeId = `${companyId}_${routeNo}`;
-
-        await setDoc(doc(db, "routes", routeId), {
-          id: routeId,                 // 🔥 ADD ID FIELD
-          edoId: companyId,            // 🔥 LINK
-          routeNo: String(routeNo).trim(),
-          description: routeDesc,
-          createdAt: new Date(),
-        });
-
-        console.log("➡️ ROUTE:", routeId);
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Upload failed");
       }
 
-      console.log("✅ UPLOAD DONE");
-      alert("EDO upload complete!");
+      alert(
+        `EDO upload complete! ${result.companies} companies, ${result.routes} routes` +
+          (result.skipped ? `, ${result.skipped} rows skipped.` : ".")
+      );
     } catch (err) {
-      console.error("❌ ERROR:", err);
-      alert("Upload failed");
+      console.error("EDO upload failed:", err);
+      alert(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   return (
