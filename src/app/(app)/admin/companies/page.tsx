@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import * as XLSX from "xlsx";
-import { db } from "@/lib/firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { auth } from "@/lib/firebase";
 
 export default function CompanyUploadPage() {
   const [rows, setRows] = useState<any[]>([]);
@@ -12,6 +11,7 @@ export default function CompanyUploadPage() {
   // 📥 READ EXCEL
   function handleFileUpload(e: any) {
     const file = e.target.files[0];
+    if (!file) return;
     const reader = new FileReader();
 
     reader.onload = (evt: any) => {
@@ -28,37 +28,51 @@ export default function CompanyUploadPage() {
     reader.readAsArrayBuffer(file);
   }
 
-  // 🚀 PUSH TO FIREBASE
+  // 🚀 SEND TO PROTECTED ADMIN API
   async function uploadToFirebase() {
     setLoading(true);
 
     try {
-      for (const row of rows) {
-        const name = row["name"] || row["Name"];
-        const type = row["type"] || row["Type"];
+      const user = auth.currentUser;
+      if (!user) throw new Error("Please sign in again.");
 
-        if (!name || !type) continue;
-
-        const id = name
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/(^-|-$)/g, "");
-
-        await setDoc(doc(db, "companies", id), {
-          name,
-          type,
+      const normalizedRows = rows.map((row) => {
+        const normalized: Record<string, unknown> = {};
+        Object.keys(row).forEach((key) => {
+          normalized[key.trim().toLowerCase()] = row[key];
         });
 
-        console.log("Uploaded:", name);
+        return {
+          name: normalized["name"],
+          type: normalized["type"],
+        };
+      });
+
+      const token = await user.getIdToken();
+      const response = await fetch("/api/admin/master-data/company-import", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ rows: normalizedRows }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Upload failed");
       }
 
-      alert("Upload complete!");
+      alert(
+        `Company upload complete! ${result.companies} companies` +
+          (result.skipped ? `, ${result.skipped} rows skipped.` : ".")
+      );
     } catch (err) {
-      console.error(err);
-      alert("Upload failed");
+      console.error("Company upload failed:", err);
+      alert(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   return (
@@ -78,7 +92,7 @@ export default function CompanyUploadPage() {
             disabled={loading}
             className="bg-blue-600 text-white px-4 py-2 rounded"
           >
-            {loading ? "Uploading..." : "Upload to Firebase"}
+            {loading ? "Uploading..." : "Upload Companies"}
           </button>
         </>
       )}

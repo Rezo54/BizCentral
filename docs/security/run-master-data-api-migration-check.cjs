@@ -4,6 +4,10 @@ const fs = require('node:fs');
 
 const routes = [
   {
+    path: 'src/app/api/admin/master-data/company-import/route.ts',
+    collections: ['companies'],
+  },
+  {
     path: 'src/app/api/admin/master-data/edo-import/route.ts',
     collections: ['companies', 'routes'],
   },
@@ -18,6 +22,10 @@ const routes = [
 ];
 
 const pages = [
+  {
+    path: 'src/app/(app)/admin/companies/page.tsx',
+    endpoint: '/api/admin/master-data/company-import',
+  },
   {
     path: 'src/app/(app)/admin/upload-edo/page.tsx',
     endpoint: '/api/admin/master-data/edo-import',
@@ -68,7 +76,7 @@ for (const page of pages) {
   }
 }
 
-console.log('PASS three master-data pages use authenticated server APIs.');
-console.log('PASS all three APIs enforce canonical Taskraft admin authorization.');
+console.log('PASS four master-data pages use authenticated server APIs.');
+console.log('PASS all four APIs enforce canonical Taskraft admin authorization.');
 console.log('PASS migrated pages contain no direct browser Firestore dependency.');
 console.log('Master-data API migration static check PASS.');
